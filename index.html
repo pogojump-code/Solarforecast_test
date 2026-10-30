@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#14532d">
+  <title>Solar Forecast</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+
+  <!-- Leaflet map library -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    crossorigin=""
+  >
+
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: #17211b;
+      background: #f3f6f3;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 16px;
+    }
+
+    main {
+      max-width: 760px;
+      margin: auto;
+    }
+
+    h1 {
+      margin: 4px 0;
+      color: #14532d;
+    }
+
+    .intro {
+      margin: 0 0 16px;
+      color: #526156;
+    }
+
+    .card {
+      margin: 12px 0;
+      padding: 16px;
+      border: 1px solid #dce5dd;
+      border-radius: 14px;
+      background: white;
+      box-shadow: 0 2px 8px #16351b0a;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    input, select, button {
+      width: 100%;
+      min-height: 44px;
+      padding: 9px 11px;
+      border: 1px solid #bdcabe;
+      border-radius: 9px;
+      background: white;
+      color: inherit;
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      background: #166534;
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      border: 1px solid #bdcabe;
+      background: white;
+      color: #14532d;
+    }
+
+    button.danger {
+      border: 1px solid #e8b7b7;
+      background: white;
+      color: #a11;
+    }
+
+    button:disabled {
+      opacity: .6;
+      cursor: wait;
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .preset-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      align-items: end;
+    }
+
+    #map {
+      height: 330px;
+      margin-top: 10px;
+      border-radius: 10px;
+      background: #e7eee8;
+    }
+
+    .hint, .status, .footnote {
+      color: #526156;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .status {
+      min-height: 1.4em;
+      margin: 12px 0 0;
+    }
+
+    .results {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .day {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 9px;
+      background: #f1f6f1;
+    }
+
+    .day strong { white-space: nowrap; }
+
+    @media (max-width: 480px) {
+      body { padding: 10px; }
+      .grid { gap: 9px; }
+      .card { padding: 13px; }
+      .preset-row { grid-template-columns: 1fr 1fr; }
+      .preset-row select { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+
+<body>
+<main>
+  <h1>☀️ Solar Forecast</h1>
+  <p class="intro">Choose a location and panel settings to estimate daily solar energy.</p>
+
+  <section class="card">
+    <h2>Location and panel</h2>
+
+    <div class="grid">
+      <div>
+        <label for="latitude">Latitude</label>
+        <input id="latitude" type="number" step="any" value="37.7749">
+      </div>
+      <div>
+        <label for="longitude">Longitude</label>
+        <input id="longitude" type="number" step="any" value="-122.4194">
+      </div>
+      <div>
+        <label for="tilt">Panel tilt (°)</label>
+        <input id="tilt" type="number" min="0" max="90" step="any" value="0">
+      </div>
+      <div>
+        <label for="azimuth">Panel azimuth (°)</label>
+        <input id="azimuth" type="number" min="-180" max="180" step="any" value="0">
+      </div>
+      <div>
+        <label for="power">Peak power (kWp)</label>
+        <input id="power" type="number" min="0.001" step="any" value="0.285">
+      </div>
+      <div>
+        <label for="presetName">Favorite name</label>
+        <input id="presetName" type="text" maxlength="40" placeholder="e.g. Home panels">
+      </div>
+    </div>
+
+    <p class="hint">
+      Azimuth convention: 0° = south, −90° = east, 90° = west, ±180° = north.
+      Tap the map to set the coordinates.
+    </p>
+
+    <div id="map" aria-label="Map. Tap to select a location."></div>
+
+    <div class="button-row">
+      <button id="forecastButton" type="button">Get 16-day forecast</button>
+      <button id="saveButton" class="secondary" type="button">Save favorite</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Saved favorites</h2>
+    <div class="preset-row">
+      <select id="favorites" aria-label="Saved favorites">
+        <option value="">No saved favorites</option>
+      </select>
+      <button id="loadButton" class="secondary" type="button">Load</button>
+      <button id="deleteButton" class="danger" type="button">Delete</button>
+    </div>
+    <p class="hint">Favorites are saved in this browser on this device.</p>
+  </section>
+
+  <section class="card">
+    <h2>Daily energy estimate</h2>
+    <p id="status" class="status" role="status">Tap the map or enter coordinates, then request a forecast.</p>
+    <div id="results" class="results"></div>
+    <p class="footnote">
+      Estimates use Open-Meteo tilted-surface irradiance and your entered peak
+      power. Actual production can differ due to temperature, shading, system
+      losses, and local conditions.
+    </p>
+  </section>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+  "use strict";
+
+  const $ = (id) => document.getElementById(id);
+  const STORAGE_KEY = "solarForecastFavoritesV1";
+
+  const map = L.map("map").setView([37.7749, -122.4194], 3);
+
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+
+  let marker = null;
+
+  function getNumber(id) {
+    return Number($(id).value);
+  }
+
+  function setMarkerFromInputs(zoom = 8) {
+    const lat = getNumber("latitude");
+    const lon = getNumber("longitude");
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) ||
+        lat < -90 || lat > 90 || lon < -180 || lon > 180) return;
+
+    const point = [lat, lon];
+    if (!marker) {
+      marker = L.marker(point).addTo(map);
+    } else {
+      marker.setLatLng(point);
+    }
+    marker.bindPopup(`${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+    map.setView(point, zoom);
+  }
+
+  map.on("click", (event) => {
+    $("latitude").value = event.latlng.lat.toFixed(5);
+    $("longitude").value = event.latlng.lng.toFixed(5);
+    setMarkerFromInputs();
+  });
+
+  $("latitude").addEventListener("change", () => setMarkerFromInputs());
+  $("longitude").addEventListener("change", () => setMarkerFromInputs());
+
+  function readFavorites() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  function writeFavorites(favorites) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(favorites));
+  }
+
+  function refreshFavorites(selectedId = "") {
+    const select = $("favorites");
+    const favorites = readFavorites();
+    select.replaceChildren();
+
+    if (favorites.length === 0) {
+      select.add(new Option("No saved favorites", ""));
+      return;
+    }
+
+    select.add(new Option("Choose a favorite…", ""));
+    for (const favorite of favorites) {
+      select.add(new Option(favorite.name, favorite.id));
+    }
+    if (selectedId) select.value = selectedId;
+  }
+
+  function currentPreset() {
+    return {
+      latitude: $("latitude").value,
+      longitude: $("longitude").value,
+      tilt: $("tilt").value,
+      azimuth: $("azimuth").value,
+      power: $("power").value
+    };
+  }
+
+  $("saveButton").addEventListener("click", () => {
+    const name = $("presetName").value.trim();
+    if (!name) {
+      $("status").textContent = "Enter a favorite name first.";
+      $("presetName").focus();
+      return;
+    }
+
+    const favorites = readFavorites();
+    const preset = currentPreset();
+    const existing = favorites.findIndex(item => item.name === name);
+
+    if (existing >= 0) {
+      favorites[existing].settings = preset;
+    } else {
+      favorites.push({
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        name,
+        settings: preset
+      });
+    }
+
+    writeFavorites(favorites);
+    refreshFavorites();
+    $("status").textContent = `Saved “${name}” on this device.`;
+  });
+
+  $("loadButton").addEventListener("click", () => {
+    const selected = readFavorites().find(item => item.id === $("favorites").value);
+    if (!selected) {
+      $("status").textContent = "Choose a saved favorite first.";
+      return;
+    }
+
+    for (const [key, value] of Object.entries(selected.settings)) {
+      $(key).value = value;
+    }
+    $("presetName").value = selected.name;
+    setMarkerFromInputs();
+    $("status").textContent = `Loaded “${selected.name}”.`;
+  });
+
+  $("deleteButton").addEventListener("click", () => {
+    const id = $("favorites").value;
+    if (!id) {
+      $("status").textContent = "Choose a saved favorite to delete.";
+      return;
+    }
+
+    writeFavorites(readFavorites().filter(item => item.id !== id));
+    refreshFavorites();
+    $("status").textContent = "Favorite deleted.";
+  });
+
+  function validInputs() {
+    const lat = getNumber("latitude");
+    const lon = getNumber("longitude");
+    const tilt = getNumber("tilt");
+    const azimuth = getNumber("azimuth");
+    const power = getNumber("power");
+
+    if (![lat, lon, tilt, azimuth, power].every(Number.isFinite)) {
+      throw new Error("Fill in every setting with a valid number.");
+    }
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      throw new Error("Latitude must be −90 to 90 and longitude −180 to 180.");
+    }
+    if (tilt < 0 || tilt > 90) {
+      throw new Error("Panel tilt must be from 0° to 90°.");
+    }
+    if (azimuth < -180 || azimuth > 180) {
+      throw new Error("Azimuth must be from −180° to 180°.");
+    }
+    if (power <= 0) {
+      throw new Error("Peak power must be greater than zero.");
+    }
+
+    return { lat, lon, tilt, azimuth, power };
+  }
+
+  $("forecastButton").addEventListener("click", async () => {
+    const button = $("forecastButton");
+    const results = $("results");
+    results.replaceChildren();
+
+    try {
+      const { lat, lon, tilt, azimuth, power } = validInputs();
+      button.disabled = true;
+      $("status").textContent = "Loading forecast…";
+      setMarkerFromInputs();
+
+      const params = new URLSearchParams({
+        latitude: String(lat),
+        longitude: String(lon),
+        hourly: "global_tilted_irradiance",
+        tilt: String(tilt),
+        azimuth: String(azimuth),
+        forecast_days: "16",
+        timezone: "auto"
+      });
+
+      const response = await fetch(
+        `https://api.open-meteo.com/v1/forecast?${params.toString()}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Forecast service returned HTTP ${response.status}.`);
+      }
+
+      const data = await response.json();
+      const times = data.hourly?.time;
+      const radiation = data.hourly?.global_tilted_irradiance;
+
+      if (!Array.isArray(times) || !Array.isArray(radiation)) {
+        throw new Error("The forecast response did not include hourly irradiance.");
+      }
+
+      const daily = new Map();
+
+      for (let i = 0; i < times.length; i++) {
+        const date = times[i].slice(0, 10);
+        const value = radiation[i];
+        if (value !== null && Number.isFinite(Number(value))) {
+          daily.set(date, (daily.get(date) || 0) + Number(value));
+        }
+      }
+
+      const dateFormatter = new Intl.DateTimeFormat(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC"
+      });
+
+      for (const [date, hourlySum] of daily) {
+        // Hourly average W/m² summed over the day, scaled by system kWp.
+        const energyKwh = hourlySum * power / 1000;
+        const row = document.createElement("div");
+        row.className = "day";
+
+        const dateLabel = document.createElement("span");
+        dateLabel.textContent = dateFormatter.format(
+          new Date(`${date}T12:00:00Z`)
+        );
+
+        const amount = document.createElement("strong");
+        amount.textContent = `${energyKwh.toFixed(2)} kWh`;
+
+        row.append(dateLabel, amount);
+        results.append(row);
+      }
+
+      $("status").textContent =
+        `Forecast received for ${daily.size} days at ${lat.toFixed(4)}, ${lon.toFixed(4)}.`;
+
+    } catch (error) {
+      $("status").textContent = error.message || "Could not load the forecast.";
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  refreshFavorites();
+  setMarkerFromInputs(3);
+</script>
+</body>
+</html>
