@@ -1,487 +1,973 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#14532d">
-  <title>Solar Forecast</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#0d1117">
+  <title>Solar Production Forecast</title>
 
-  <!-- Leaflet map library -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    crossorigin=""
-  >
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 
   <style>
     :root {
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      color: #17211b;
-      background: #f3f6f3;
+      color-scheme: dark;
+      --bg: #0d1117;
+      --panel: #161b22;
+      --panel-2: #1d2632;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #9da7b3;
+      --accent: #f0b429;
+      --accent-hover: #ffc94d;
+      --danger: #ff7b72;
     }
 
     * { box-sizing: border-box; }
 
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 76px;
+    }
+
     body {
       margin: 0;
-      padding: 16px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    main {
-      max-width: 760px;
-      margin: auto;
-    }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
 
-    h1 {
-      margin: 4px 0;
-      color: #14532d;
-    }
-
-    .intro {
-      margin: 0 0 16px;
-      color: #526156;
-    }
-
-    .card {
-      margin: 12px 0;
-      padding: 16px;
-      border: 1px solid #dce5dd;
-      border-radius: 14px;
-      background: white;
-      box-shadow: 0 2px 8px #16351b0a;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 1100;
+      display: flex;
+      align-items: center;
       gap: 12px;
+      min-height: 58px;
+      padding: 10px 16px;
+      background: rgba(13, 17, 23, 0.96);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(10px);
     }
 
-    label {
-      display: block;
-      margin-bottom: 5px;
-      font-size: 14px;
-      font-weight: 650;
+    .menu-button,
+    .primary-button,
+    .secondary-button,
+    .favorite-button {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      background: var(--panel-2);
     }
 
-    input, select, button {
-      width: 100%;
-      min-height: 44px;
-      padding: 9px 11px;
-      border: 1px solid #bdcabe;
-      border-radius: 9px;
-      background: white;
-      color: inherit;
-      font: inherit;
+    .menu-button { padding: 7px 11px; }
+    .menu-button:hover,
+    .secondary-button:hover,
+    .favorite-button:hover { background: #293442; }
+
+    .app-title {
+      margin: 0;
+      font-size: 1.05rem;
     }
 
-    button {
-      border: 0;
-      background: #166534;
-      color: white;
-      font-weight: 700;
-      cursor: pointer;
+    .selected-name {
+      margin-left: auto;
+      max-width: min(55vw, 520px);
+      overflow: hidden;
+      color: var(--accent);
+      font-weight: 750;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
-    button.secondary {
-      border: 1px solid #bdcabe;
-      background: white;
-      color: #14532d;
+    .sidebar {
+      position: fixed;
+      z-index: 1050;
+      top: 58px;
+      bottom: 0;
+      left: 0;
+      width: 290px;
+      padding: 16px;
+      overflow-y: auto;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      transform: translateX(0);
+      transition: transform 180ms ease;
     }
 
-    button.danger {
-      border: 1px solid #e8b7b7;
-      background: white;
-      color: #a11;
+    .sidebar.collapsed { transform: translateX(-100%); }
+
+    .sidebar h2 {
+      margin: 0 0 12px;
+      font-size: 1rem;
     }
 
-    button:disabled {
-      opacity: .6;
-      cursor: wait;
+    .sidebar-note,
+    .help-text,
+    .status {
+      color: var(--muted);
+      font-size: 0.88rem;
     }
 
-    .button-row {
+    .favorite-list {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+      gap: 8px;
       margin-top: 12px;
     }
 
-    .preset-row {
-      display: grid;
-      grid-template-columns: 1fr auto auto;
-      gap: 8px;
-      align-items: end;
+    .favorite-row { display: flex; gap: 6px; }
+
+    .favorite-button {
+      flex: 1;
+      min-width: 0;
+      padding: 9px 10px;
+      overflow: hidden;
+      text-align: left;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
+
+    .delete-button {
+      width: 38px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--danger);
+      background: transparent;
+    }
+
+    .delete-button:hover { background: #352126; }
+
+    main {
+      width: min(1100px, 100%);
+      margin: 0 auto;
+      padding: 20px;
+      transition: margin-left 180ms ease;
+    }
+
+    body.sidebar-open main {
+      margin-left: 290px;
+      width: calc(100% - 290px);
+    }
+
+    .card {
+      margin-bottom: 16px;
+      padding: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .card h2 {
+      margin: 0 0 14px;
+      font-size: 1.15rem;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(115px, 1fr));
+      gap: 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .field input,
+    .search-row input {
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      background: #0d1117;
+    }
+
+    .preset-name-field {
+      margin: 0 0 14px;
+    }
+
+    .preset-name-field input { max-width: 480px; }
+
+    .parameter-input.favorite-selected {
+      font-weight: 800;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(240, 180, 41, 0.2);
+    }
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .primary-button,
+    .secondary-button { padding: 9px 13px; }
+
+    .primary-button {
+      color: #151515;
+      background: var(--accent);
+      border-color: var(--accent);
+      font-weight: 700;
+    }
+
+    .primary-button:hover { background: var(--accent-hover); }
+
+    .search-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .search-row input { flex: 1; min-width: 0; }
 
     #map {
       height: 330px;
-      margin-top: 10px;
+      overflow: hidden;
+      border: 1px solid var(--border);
       border-radius: 10px;
-      background: #e7eee8;
-    }
-
-    .hint, .status, .footnote {
-      color: #526156;
-      font-size: 14px;
-      line-height: 1.45;
+      background: #202832;
     }
 
     .status {
       min-height: 1.4em;
-      margin: 12px 0 0;
+      margin-top: 10px;
     }
 
-    .results {
+    .status.error { color: var(--danger); }
+
+    .summary {
       display: grid;
-      gap: 8px;
-      margin-top: 12px;
+      grid-template-columns: repeat(3, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
     }
 
-    .day {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 10px 12px;
+    .summary-item {
+      padding: 12px;
+      background: #0d1117;
+      border: 1px solid var(--border);
       border-radius: 9px;
-      background: #f1f6f1;
     }
 
-    .day strong { white-space: nowrap; }
+    .summary-item span {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
 
-    @media (max-width: 480px) {
-      body { padding: 10px; }
-      .grid { gap: 9px; }
-      .card { padding: 13px; }
-      .preset-row { grid-template-columns: 1fr 1fr; }
-      .preset-row select { grid-column: 1 / -1; }
+    .summary-item strong { font-size: 1.12rem; }
+
+    .chart-wrap {
+      position: relative;
+      height: 310px;
+      margin: 16px 0 22px;
+    }
+
+    .chart-wrap h3 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+    }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .empty-state {
+      padding: 24px 8px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      body.sidebar-open main {
+        margin-left: 0;
+        width: 100%;
+      }
+
+      .sidebar { box-shadow: 12px 0 32px rgba(0, 0, 0, 0.35); }
+      main { padding: 14px; }
+      .form-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+    }
+
+    @media (max-width: 520px) {
+      .app-title { font-size: 0.95rem; }
+      .selected-name { max-width: 38vw; font-size: 0.87rem; }
+      .summary { grid-template-columns: 1fr; }
+      #map { height: 290px; }
+      .chart-wrap { height: 270px; }
     }
   </style>
 </head>
 
-<body>
-<main>
-  <h1>☀️ Solar Forecast</h1>
-  <p class="intro">Choose a location and panel settings to estimate daily solar energy.</p>
+<body class="sidebar-open">
+  <header class="topbar">
+    <button id="menuToggle" class="menu-button" type="button"
+      aria-label="Collapse favorites menu" aria-expanded="true">☰</button>
+    <h1 class="app-title">Solar Forecast</h1>
+    <div id="selectedNameDisplay" class="selected-name" aria-live="polite"></div>
+  </header>
 
-  <section class="card">
-    <h2>Location and panel</h2>
+  <aside id="sidebar" class="sidebar" aria-label="Favorite settings">
+    <h2>Favorite settings</h2>
+    <p class="sidebar-note">Choose a favorite to load its settings and forecast.</p>
+    <div id="favoriteList" class="favorite-list"></div>
+    <p id="noFavorites" class="help-text">No favorites saved yet.</p>
+  </aside>
 
-    <div class="grid">
-      <div>
-        <label for="latitude">Latitude</label>
-        <input id="latitude" type="number" step="any" value="37.7749">
+  <main>
+    <section class="card">
+      <h2>Location</h2>
+      <div class="search-row">
+        <input id="placeSearch" type="search" placeholder="Search for a place"
+          autocomplete="off">
+        <button id="searchButton" class="primary-button" type="button">Search</button>
       </div>
-      <div>
-        <label for="longitude">Longitude</label>
-        <input id="longitude" type="number" step="any" value="-122.4194">
+      <div id="map" aria-label="Select a location on the map"></div>
+      <div id="locationStatus" class="status">
+        Search for a place or click the map.
       </div>
-      <div>
-        <label for="tilt">Panel tilt (°)</label>
-        <input id="tilt" type="number" min="0" max="90" step="any" value="0">
+    </section>
+
+    <section class="card">
+      <h2>Solar panel settings</h2>
+
+      <div class="field preset-name-field">
+        <label for="favoriteName">Favorite / place name</label>
+        <input id="favoriteName" type="text"
+          placeholder="Enter a name to save these settings">
       </div>
-      <div>
-        <label for="azimuth">Panel azimuth (°)</label>
-        <input id="azimuth" type="number" min="-180" max="180" step="any" value="0">
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="latitude">Latitude</label>
+          <input class="parameter-input" id="latitude" type="number"
+            step="any" value="40.7128">
+        </div>
+        <div class="field">
+          <label for="longitude">Longitude</label>
+          <input class="parameter-input" id="longitude" type="number"
+            step="any" value="-74.0060">
+        </div>
+        <div class="field">
+          <label for="tilt">Panel tilt (°)</label>
+          <input class="parameter-input" id="tilt" type="number"
+            min="0" max="90" step="1" value="0">
+        </div>
+        <div class="field">
+          <label for="azimuth">Panel azimuth (°)</label>
+          <input class="parameter-input" id="azimuth" type="number"
+            min="-180" max="180" step="1" value="0">
+        </div>
+        <div class="field">
+          <label for="peakPower">Peak power (kW)</label>
+          <input class="parameter-input" id="peakPower" type="number"
+            min="0.001" step="any" value="0.285">
+        </div>
       </div>
-      <div>
-        <label for="power">Peak power (kWp)</label>
-        <input id="power" type="number" min="0.001" step="any" value="0.285">
+
+      <div class="button-row">
+        <button id="forecastButton" class="primary-button" type="button">
+          Get 16-day forecast
+        </button>
+        <button id="saveFavoriteButton" class="secondary-button" type="button">
+          Save as favorite
+        </button>
+        <button id="clearSelectionButton" class="secondary-button" type="button">
+          Clear favorite selection
+        </button>
       </div>
-      <div>
-        <label for="presetName">Favorite name</label>
-        <input id="presetName" type="text" maxlength="40" placeholder="e.g. Home panels">
+
+      <div id="forecastStatus" class="status" role="status"></div>
+      <p class="help-text">
+        Azimuth convention: 0° = south, −90° = east, 90° = west, and ±180° = north.
+      </p>
+    </section>
+
+    <section id="forecast" class="card">
+      <h2>Daily energy forecast</h2>
+      <div id="forecastContent" class="empty-state">
+        Select a location and request a forecast.
       </div>
-    </div>
 
-    <p class="hint">
-      Azimuth convention: 0° = south, −90° = east, 90° = west, ±180° = north.
-      Tap the map to set the coordinates.
-    </p>
+      <div id="forecastResults" hidden>
+        <div class="summary">
+          <div class="summary-item">
+            <span>Forecast period</span>
+            <strong id="periodSummary">—</strong>
+          </div>
+          <div class="summary-item">
+            <span>Total energy</span>
+            <strong id="totalSummary">—</strong>
+          </div>
+          <div class="summary-item">
+            <span>Daily average</span>
+            <strong id="averageSummary">—</strong>
+          </div>
+        </div>
 
-    <div id="map" aria-label="Map. Tap to select a location."></div>
+        <div class="chart-wrap">
+          <h3>Daily energy</h3>
+          <canvas id="dailyChart"></canvas>
+        </div>
 
-    <div class="button-row">
-      <button id="forecastButton" type="button">Get 16-day forecast</button>
-      <button id="saveButton" class="secondary" type="button">Save favorite</button>
-    </div>
-  </section>
+        <div class="chart-wrap">
+          <h3>Cumulative energy</h3>
+          <canvas id="cumulativeChart"></canvas>
+        </div>
 
-  <section class="card">
-    <h2>Saved favorites</h2>
-    <div class="preset-row">
-      <select id="favorites" aria-label="Saved favorites">
-        <option value="">No saved favorites</option>
-      </select>
-      <button id="loadButton" class="secondary" type="button">Load</button>
-      <button id="deleteButton" class="danger" type="button">Delete</button>
-    </div>
-    <p class="hint">Favorites are saved in this browser on this device.</p>
-  </section>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Daily energy (kWh)</th>
+                <th>Cumulative energy (kWh)</th>
+              </tr>
+            </thead>
+            <tbody id="forecastTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
 
-  <section class="card">
-    <h2>Daily energy estimate</h2>
-    <p id="status" class="status" role="status">Tap the map or enter coordinates, then request a forecast.</p>
-    <div id="results" class="results"></div>
-    <p class="footnote">
-      Estimates use Open-Meteo tilted-surface irradiance and your entered peak
-      power. Actual production can differ due to temperature, shading, system
-      losses, and local conditions.
-    </p>
-  </section>
-</main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-<script>
-  "use strict";
+  <script>
+    const STORAGE_KEY = "solarForecastFavorites_v1";
 
-  const $ = (id) => document.getElementById(id);
-  const STORAGE_KEY = "solarForecastFavoritesV1";
-
-  const map = L.map("map").setView([37.7749, -122.4194], 3);
-
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-  }).addTo(map);
-
-  let marker = null;
-
-  function getNumber(id) {
-    return Number($(id).value);
-  }
-
-  function setMarkerFromInputs(zoom = 8) {
-    const lat = getNumber("latitude");
-    const lon = getNumber("longitude");
-
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) ||
-        lat < -90 || lat > 90 || lon < -180 || lon > 180) return;
-
-    const point = [lat, lon];
-    if (!marker) {
-      marker = L.marker(point).addTo(map);
-    } else {
-      marker.setLatLng(point);
-    }
-    marker.bindPopup(`${lat.toFixed(4)}, ${lon.toFixed(4)}`);
-    map.setView(point, zoom);
-  }
-
-  map.on("click", (event) => {
-    $("latitude").value = event.latlng.lat.toFixed(5);
-    $("longitude").value = event.latlng.lng.toFixed(5);
-    setMarkerFromInputs();
-  });
-
-  $("latitude").addEventListener("change", () => setMarkerFromInputs());
-  $("longitude").addEventListener("change", () => setMarkerFromInputs());
-
-  function readFavorites() {
-    try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    } catch {
-      return [];
-    }
-  }
-
-  function writeFavorites(favorites) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(favorites));
-  }
-
-  function refreshFavorites(selectedId = "") {
-    const select = $("favorites");
-    const favorites = readFavorites();
-    select.replaceChildren();
-
-    if (favorites.length === 0) {
-      select.add(new Option("No saved favorites", ""));
-      return;
-    }
-
-    select.add(new Option("Choose a favorite…", ""));
-    for (const favorite of favorites) {
-      select.add(new Option(favorite.name, favorite.id));
-    }
-    if (selectedId) select.value = selectedId;
-  }
-
-  function currentPreset() {
-    return {
-      latitude: $("latitude").value,
-      longitude: $("longitude").value,
-      tilt: $("tilt").value,
-      azimuth: $("azimuth").value,
-      power: $("power").value
+    const elements = {
+      sidebar: document.getElementById("sidebar"),
+      menuToggle: document.getElementById("menuToggle"),
+      favoriteList: document.getElementById("favoriteList"),
+      noFavorites: document.getElementById("noFavorites"),
+      name: document.getElementById("favoriteName"),
+      nameDisplay: document.getElementById("selectedNameDisplay"),
+      latitude: document.getElementById("latitude"),
+      longitude: document.getElementById("longitude"),
+      tilt: document.getElementById("tilt"),
+      azimuth: document.getElementById("azimuth"),
+      peakPower: document.getElementById("peakPower"),
+      placeSearch: document.getElementById("placeSearch"),
+      locationStatus: document.getElementById("locationStatus"),
+      forecastStatus: document.getElementById("forecastStatus"),
+      forecastContent: document.getElementById("forecastContent"),
+      forecastResults: document.getElementById("forecastResults"),
+      forecastTable: document.getElementById("forecastTable"),
+      periodSummary: document.getElementById("periodSummary"),
+      totalSummary: document.getElementById("totalSummary"),
+      averageSummary: document.getElementById("averageSummary")
     };
-  }
 
-  $("saveButton").addEventListener("click", () => {
-    const name = $("presetName").value.trim();
-    if (!name) {
-      $("status").textContent = "Enter a favorite name first.";
-      $("presetName").focus();
-      return;
+    let favorites = loadFavorites();
+    let activeFavoriteId = null;
+    let dailyChart = null;
+    let cumulativeChart = null;
+    let marker = null;
+    let forecastRequestId = 0;
+
+    const map = L.map("map").setView([40.7128, -74.0060], 5);
+
+    // Standard OpenStreetMap tiles; no map API key required.
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19
+    }).addTo(map);
+
+    function loadFavorites() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        return Array.isArray(saved) ? saved : [];
+      } catch {
+        return [];
+      }
     }
 
-    const favorites = readFavorites();
-    const preset = currentPreset();
-    const existing = favorites.findIndex(item => item.name === name);
-
-    if (existing >= 0) {
-      favorites[existing].settings = preset;
-    } else {
-      favorites.push({
-        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-        name,
-        settings: preset
-      });
+    function saveFavoritesToStorage() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(favorites));
     }
 
-    writeFavorites(favorites);
-    refreshFavorites();
-    $("status").textContent = `Saved “${name}” on this device.`;
-  });
-
-  $("loadButton").addEventListener("click", () => {
-    const selected = readFavorites().find(item => item.id === $("favorites").value);
-    if (!selected) {
-      $("status").textContent = "Choose a saved favorite first.";
-      return;
+    function makeId() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
     }
 
-    for (const [key, value] of Object.entries(selected.settings)) {
-      $(key).value = value;
-    }
-    $("presetName").value = selected.name;
-    setMarkerFromInputs();
-    $("status").textContent = `Loaded “${selected.name}”.`;
-  });
-
-  $("deleteButton").addEventListener("click", () => {
-    const id = $("favorites").value;
-    if (!id) {
-      $("status").textContent = "Choose a saved favorite to delete.";
-      return;
-    }
-
-    writeFavorites(readFavorites().filter(item => item.id !== id));
-    refreshFavorites();
-    $("status").textContent = "Favorite deleted.";
-  });
-
-  function validInputs() {
-    const lat = getNumber("latitude");
-    const lon = getNumber("longitude");
-    const tilt = getNumber("tilt");
-    const azimuth = getNumber("azimuth");
-    const power = getNumber("power");
-
-    if (![lat, lon, tilt, azimuth, power].every(Number.isFinite)) {
-      throw new Error("Fill in every setting with a valid number.");
-    }
-    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-      throw new Error("Latitude must be −90 to 90 and longitude −180 to 180.");
-    }
-    if (tilt < 0 || tilt > 90) {
-      throw new Error("Panel tilt must be from 0° to 90°.");
-    }
-    if (azimuth < -180 || azimuth > 180) {
-      throw new Error("Azimuth must be from −180° to 180°.");
-    }
-    if (power <= 0) {
-      throw new Error("Peak power must be greater than zero.");
-    }
-
-    return { lat, lon, tilt, azimuth, power };
-  }
-
-  $("forecastButton").addEventListener("click", async () => {
-    const button = $("forecastButton");
-    const results = $("results");
-    results.replaceChildren();
-
-    try {
-      const { lat, lon, tilt, azimuth, power } = validInputs();
-      button.disabled = true;
-      $("status").textContent = "Loading forecast…";
-      setMarkerFromInputs();
-
-      const params = new URLSearchParams({
-        latitude: String(lat),
-        longitude: String(lon),
-        hourly: "global_tilted_irradiance",
-        tilt: String(tilt),
-        azimuth: String(azimuth),
-        forecast_days: "16",
-        timezone: "auto"
-      });
-
-      const response = await fetch(
-        `https://api.open-meteo.com/v1/forecast?${params.toString()}`
+    function setSidebarOpen(open) {
+      elements.sidebar.classList.toggle("collapsed", !open);
+      document.body.classList.toggle("sidebar-open", open);
+      elements.menuToggle.setAttribute("aria-expanded", String(open));
+      elements.menuToggle.setAttribute(
+        "aria-label",
+        open ? "Collapse favorites menu" : "Open favorites menu"
       );
+      setTimeout(() => map.invalidateSize(), 220);
+    }
 
-      if (!response.ok) {
-        throw new Error(`Forecast service returned HTTP ${response.status}.`);
+    elements.menuToggle.addEventListener("click", () => {
+      setSidebarOpen(elements.sidebar.classList.contains("collapsed"));
+    });
+
+    function updateSelectedNameDisplay() {
+      elements.nameDisplay.textContent = elements.name.value.trim();
+    }
+
+    elements.name.addEventListener("input", updateSelectedNameDisplay);
+
+    function setFavoriteParameterStyle(selected) {
+      document.querySelectorAll(".parameter-input").forEach(input => {
+        input.classList.toggle("favorite-selected", selected);
+      });
+    }
+
+    function clearFavoriteSelection(clearName = true) {
+      activeFavoriteId = null;
+      setFavoriteParameterStyle(false);
+
+      if (clearName) {
+        elements.name.value = "";
+        updateSelectedNameDisplay();
+      }
+    }
+
+    function getSettings() {
+      return {
+        latitude: Number(elements.latitude.value),
+        longitude: Number(elements.longitude.value),
+        tilt: Number(elements.tilt.value),
+        azimuth: Number(elements.azimuth.value),
+        peakPower: Number(elements.peakPower.value)
+      };
+    }
+
+    function settingsAreValid(settings) {
+      return Number.isFinite(settings.latitude) &&
+        settings.latitude >= -90 && settings.latitude <= 90 &&
+        Number.isFinite(settings.longitude) &&
+        settings.longitude >= -180 && settings.longitude <= 180 &&
+        Number.isFinite(settings.tilt) &&
+        settings.tilt >= 0 && settings.tilt <= 90 &&
+        Number.isFinite(settings.azimuth) &&
+        settings.azimuth >= -180 && settings.azimuth <= 180 &&
+        Number.isFinite(settings.peakPower) &&
+        settings.peakPower > 0;
+    }
+
+    function renderFavorites() {
+      elements.favoriteList.replaceChildren();
+      elements.noFavorites.hidden = favorites.length > 0;
+
+      favorites.forEach(favorite => {
+        const row = document.createElement("div");
+        row.className = "favorite-row";
+
+        const loadButton = document.createElement("button");
+        loadButton.type = "button";
+        loadButton.className = "favorite-button";
+        loadButton.textContent = favorite.name;
+        loadButton.title = favorite.name;
+        loadButton.addEventListener("click", () => selectFavorite(favorite));
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "delete-button";
+        deleteButton.textContent = "×";
+        deleteButton.title = "Delete " + favorite.name;
+        deleteButton.setAttribute("aria-label", "Delete " + favorite.name);
+
+        deleteButton.addEventListener("click", event => {
+          event.stopPropagation();
+          favorites = favorites.filter(item => item.id !== favorite.id);
+
+          if (activeFavoriteId === favorite.id) {
+            clearFavoriteSelection(true);
+          }
+
+          saveFavoritesToStorage();
+          renderFavorites();
+        });
+
+        row.append(loadButton, deleteButton);
+        elements.favoriteList.appendChild(row);
+      });
+    }
+
+    async function selectFavorite(favorite) {
+      activeFavoriteId = favorite.id;
+      elements.name.value = favorite.name;
+      elements.latitude.value = favorite.latitude;
+      elements.longitude.value = favorite.longitude;
+      elements.tilt.value = favorite.tilt;
+      elements.azimuth.value = favorite.azimuth;
+      elements.peakPower.value = favorite.peakPower;
+
+      updateSelectedNameDisplay();
+      setFavoriteParameterStyle(true);
+
+      const latitude = Number(favorite.latitude);
+      const longitude = Number(favorite.longitude);
+
+      if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+        setMapLocation(latitude, longitude, 8);
       }
 
-      const data = await response.json();
-      const times = data.hourly?.time;
-      const radiation = data.hourly?.global_tilted_irradiance;
+      // Close the menu, load the forecast, and scroll to it.
+      setSidebarOpen(false);
+      const forecastPromise = fetchForecast();
 
-      if (!Array.isArray(times) || !Array.isArray(radiation)) {
-        throw new Error("The forecast response did not include hourly irradiance.");
+      requestAnimationFrame(() => {
+        document.getElementById("forecast").scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+      });
+
+      await forecastPromise;
+    }
+
+    function setMapLocation(latitude, longitude, zoom = 9) {
+      map.setView([latitude, longitude], zoom);
+
+      if (marker) {
+        marker.setLatLng([latitude, longitude]);
+      } else {
+        marker = L.marker([latitude, longitude]).addTo(map);
+      }
+    }
+
+    map.on("click", event => {
+      const { lat, lng } = event.latlng;
+      elements.latitude.value = lat.toFixed(6);
+      elements.longitude.value = lng.toFixed(6);
+      setMapLocation(lat, lng, map.getZoom());
+
+      clearFavoriteSelection(true);
+      elements.locationStatus.textContent =
+        `Selected coordinates: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    });
+
+    async function searchPlace() {
+      const query = elements.placeSearch.value.trim();
+
+      if (!query) {
+        elements.locationStatus.textContent = "Enter a place name to search.";
+        return;
       }
 
-      const daily = new Map();
+      elements.locationStatus.classList.remove("error");
+      elements.locationStatus.textContent = "Searching…";
 
-      for (let i = 0; i < times.length; i++) {
-        const date = times[i].slice(0, 10);
-        const value = radiation[i];
-        if (value !== null && Number.isFinite(Number(value))) {
-          daily.set(date, (daily.get(date) || 0) + Number(value));
+      try {
+        const url = new URL("https://photon.komoot.io/api/");
+        url.searchParams.set("q", query);
+        url.searchParams.set("limit", "5");
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Place search failed.");
+
+        const data = await response.json();
+        const place = data.features?.[0];
+
+        if (!place) {
+          elements.locationStatus.textContent = "No matching place found.";
+          return;
         }
+
+        const [longitude, latitude] = place.geometry.coordinates;
+        const props = place.properties || {};
+        const placeName = [
+          props.name,
+          props.city,
+          props.state,
+          props.country
+        ].filter(Boolean).filter((value, index, array) =>
+          array.indexOf(value) === index
+        ).join(", ") || query;
+
+        elements.latitude.value = Number(latitude).toFixed(6);
+        elements.longitude.value = Number(longitude).toFixed(6);
+        elements.name.value = placeName;
+
+        clearFavoriteSelection(false);
+        updateSelectedNameDisplay();
+        setMapLocation(Number(latitude), Number(longitude), 10);
+
+        elements.locationStatus.textContent = `Selected: ${placeName}`;
+      } catch (error) {
+        elements.locationStatus.classList.add("error");
+        elements.locationStatus.textContent =
+          "Could not search for that place. Check your connection and try again.";
+      }
+    }
+
+    document.getElementById("searchButton")
+      .addEventListener("click", searchPlace);
+
+    elements.placeSearch.addEventListener("keydown", event => {
+      if (event.key === "Enter") searchPlace();
+    });
+
+    document.getElementById("saveFavoriteButton").addEventListener("click", () => {
+      const name = elements.name.value.trim();
+      const settings = getSettings();
+
+      if (!name) {
+        elements.forecastStatus.classList.add("error");
+        elements.forecastStatus.textContent =
+          "Enter a favorite name before saving.";
+        elements.name.focus();
+        return;
       }
 
-      const dateFormatter = new Intl.DateTimeFormat(undefined, {
+      if (!settingsAreValid(settings)) {
+        elements.forecastStatus.classList.add("error");
+        elements.forecastStatus.textContent =
+          "Check the coordinates, tilt, azimuth, and peak power values.";
+        return;
+      }
+
+      let favorite = activeFavoriteId
+        ? favorites.find(item => item.id === activeFavoriteId)
+        : null;
+
+      if (favorite) {
+        Object.assign(favorite, { name, ...settings });
+      } else {
+        favorite = { id: makeId(), name, ...settings };
+        favorites.push(favorite);
+      }
+
+      activeFavoriteId = favorite.id;
+      setFavoriteParameterStyle(true);
+      updateSelectedNameDisplay();
+      saveFavoritesToStorage();
+      renderFavorites();
+
+      elements.forecastStatus.classList.remove("error");
+      elements.forecastStatus.textContent = `Saved “${name}”.`;
+    });
+
+    document.getElementById("clearSelectionButton").addEventListener("click", () => {
+      clearFavoriteSelection(true);
+      elements.forecastStatus.textContent = "Favorite selection cleared.";
+    });
+
+    document.getElementById("forecastButton")
+      .addEventListener("click", fetchForecast);
+
+    async function fetchForecast() {
+      const requestId = ++forecastRequestId;
+      const settings = getSettings();
+
+      elements.forecastStatus.classList.remove("error");
+
+      if (!settingsAreValid(settings)) {
+        elements.forecastStatus.classList.add("error");
+        elements.forecastStatus.textContent =
+          "Check the coordinates, tilt, azimuth, and peak power values.";
+        return;
+      }
+
+      elements.forecastStatus.textContent = "Loading forecast…";
+
+      const url = new URL("https://api.open-meteo.com/v1/forecast");
+      url.searchParams.set("latitude", settings.latitude);
+      url.searchParams.set("longitude", settings.longitude);
+      url.searchParams.set("hourly", "global_tilted_irradiance");
+      url.searchParams.set("tilt", settings.tilt);
+      url.searchParams.set("azimuth", settings.azimuth);
+      url.searchParams.set("forecast_days", "16");
+      url.searchParams.set("timezone", "auto");
+
+      try {
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          throw new Error(`Forecast request failed (${response.status}).`);
+        }
+
+        const data = await response.json();
+        if (requestId !== forecastRequestId) return;
+
+        const times = data.hourly?.time;
+        const irradiance = data.hourly?.global_tilted_irradiance;
+
+        if (!Array.isArray(times) || !Array.isArray(irradiance)) {
+          throw new Error(
+            "The API response did not include hourly tilted irradiance."
+          );
+        }
+
+        const dailyTotals = new Map();
+
+        times.forEach((time, index) => {
+          const date = time.slice(0, 10);
+          const value = irradiance[index];
+
+          if (!dailyTotals.has(date)) dailyTotals.set(date, 0);
+
+          if (Number.isFinite(value)) {
+            // Hourly average W/m² × panel power kW ÷ 1000 = estimated kWh.
+            dailyTotals.set(
+              date,
+              dailyTotals.get(date) + value * settings.peakPower / 1000
+            );
+          }
+        });
+
+        const rows = [...dailyTotals.entries()]
+          .slice(0, 16)
+          .map(([date, energy]) => ({ date, energy }));
+
+        let runningTotal = 0;
+        rows.forEach(row => {
+          runningTotal += row.energy;
+          row.cumulative = runningTotal;
+        });
+
+        renderForecast(rows);
+        elements.forecastStatus.textContent =
+          `Forecast loaded for ${rows.length} days.`;
+      } catch (error) {
+        if (requestId !== forecastRequestId) return;
+
+        elements.forecastStatus.classList.add("error");
+        elements.forecastStatus.textContent =
+          error.message || "Could not load the forecast.";
+      }
+    }
+
+    function formatDate(dateString) {
+      return new Intl.DateTimeFormat(undefined, {
         weekday: "short",
         month: "short",
-        day: "numeric",
-        timeZone: "UTC"
+        day: "numeric"
+      }).format(new Date(dateString + "T12:00:00"));
+    }
+
+    function renderForecast(rows) {
+      elements.forecastContent.hidden = true;
+      elements.forecastResults.hidden = false;
+      elements.forecastTable.replaceChildren();
+
+      const labels = rows.map(row => formatDate(row.date));
+      const dailyValues = rows.map(row => Number(row.energy.toFixed(3)));
+      const cumulativeValues = rows.map(row =>
+        Number(row.cumulative.toFixed(3))
+      );
+
+      const total = rows.length ? rows[rows.length - 1].cumulative : 0;
+      const average = rows.length ? total / rows.length : 0;
+
+      elements.periodSummary.textContent = rows.length
+        ? `${formatDate(rows[0].date)} – ${formatDate(rows[rows.length - 1].date)}`
+        : "—";
+      elements.totalSummary.textContent = `${total.toFixed(2)} kWh`;
+      elements.averageSummary.textContent = `${average.toFixed(2)} kWh`;
+
+      rows.forEach(row => {
+        const tr = document.createElement("tr");
+        const dateCell = document.createElement("td");
+        const dailyCell = document.createElement("td");
+        const cumulativeCell = document.createElement("td");
+
+        dateCell.textContent = formatDate(row.date);
+        dailyCell.textContent = row.energy.toFixed(2);
+        cumulativeCell.textContent = row.cumulative.toFixed(2);
+
+        tr.append(dateCell, dailyCell, cumulativeCell);
+        elements.forecastTable.appendChild(tr);
       });
 
-      for (const [date, hourlySum] of daily) {
-        // Hourly average W/m² summed over the day, scaled by system kWp.
-        const energyKwh = hourlySum * power / 1000;
-        const row = document.createElement("div");
-        row.className = "day";
+      const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: "#e6edf3" } }
+        },
+        scales: {
+          x: {
+            ticks: { color: "#9da7b3", maxRotation: 45, minRotation: 0 },
+            grid: { color: "rgba(157, 167, 179, 0.12)" }
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: "#9da7b3" },
+            grid: { color: "rgba(157, 167, 179, 0.12)" },
+            title: {
+              display: true,
+              text: "Energy (kWh)",
+              color: "#9da7b3"
+            }
+          }
+        }
+      };
 
-        const dateLabel = document.createElement("span");
-        dateLabel.textContent = dateFormatter.format(
-          new Date(`${date}T12:00:00Z`)
-        );
+      if (dailyChart) dailyChart.destroy();
+      if (cumulativeChart) cumulativeChart.destroy();
 
-        const amount = document.createElement("strong");
-        amount.textContent = `${energyKwh.toFixed(2)} kWh`;
+      dailyChart = new Chart(document.getElementById("dailyChart"), {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: "Daily energy (kWh)",
+            data: dailyValues,
+            backgroundColor: "rgba(240, 180, 41, 0.78)",
+            borderColor: "#f0b429",
+            borderWidth: 1,
+            borderRadius: 4
+          }]
+        },
+        options: chartOptions
+      });
 
-        row.append(dateLabel, amount);
-        results.append(row);
-      }
-
-      $("status").textContent =
-        `Forecast received for ${daily.size} days at ${lat.toFixed(4)}, ${lon.toFixed(4)}.`;
-
-    } catch (error) {
-      $("status").textContent = error.message || "Could not load the forecast.";
-    } finally {
-      button.disabled = false;
+      cumulativeChart = new Chart(document.getElementById("cumulativeChart"), {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: "Cumulative energy (kWh)",
+            data: cumulativeValues,
+            borderColor: "#58a6ff",
+            backgroundColor: "rgba(88, 166, 255, 0.16)",
+            fill: true,
+            tension: 0.25,
+            pointRadius: 3
+          }]
+        },
+        options: chartOptions
+      });
     }
-  });
 
-  refreshFavorites();
-  setMarkerFromInputs(3);
-</script>
+    renderFavorites();
+    updateSelectedNameDisplay();
+  </script>
 </body>
 </html>
