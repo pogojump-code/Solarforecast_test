@@ -167,7 +167,7 @@
 
     .form-grid {
       display: grid;
-      grid-template-columns: repeat(5, minmax(115px, 1fr));
+      grid-template-columns: repeat(6, minmax(110px, 1fr));
       gap: 12px;
     }
 
@@ -226,6 +226,7 @@
       display: flex;
       gap: 8px;
       margin-bottom: 10px;
+      align-items: center;
     }
 
     .search-row input { flex: 1; min-width: 0; }
@@ -347,10 +348,11 @@
         <input id="placeSearch" type="search" placeholder="Search for a place"
           autocomplete="off">
         <button id="searchButton" class="primary-button" type="button">Search</button>
+        <button id="locateButton" class="secondary-button" type="button">Use my location</button>
       </div>
       <div id="map" aria-label="Select a location on the map"></div>
       <div id="locationStatus" class="status">
-        Search for a place or click the map.
+        Search for a place, click the map, or use your device location.
       </div>
     </section>
 
@@ -389,6 +391,11 @@
           <input class="parameter-input" id="peakPower" type="number"
             min="0.001" step="any" value="0.285">
         </div>
+        <div class="field">
+          <label for="lossPercent">System losses (%)</label>
+          <input class="parameter-input" id="lossPercent" type="number"
+            min="0" max="100" step="0.1" value="14">
+        </div>
       </div>
 
       <div class="button-row">
@@ -406,6 +413,7 @@
       <div id="forecastStatus" class="status" role="status"></div>
       <p class="help-text">
         Azimuth convention: 0° = south, −90° = east, 90° = west, and ±180° = north.
+        System losses estimate wiring, inverter, soiling, temperature, and other efficiency reductions.
       </p>
     </section>
 
@@ -475,7 +483,9 @@
       tilt: document.getElementById("tilt"),
       azimuth: document.getElementById("azimuth"),
       peakPower: document.getElementById("peakPower"),
+      lossPercent: document.getElementById("lossPercent"),
       placeSearch: document.getElementById("placeSearch"),
+      locateButton: document.getElementById("locateButton"),
       locationStatus: document.getElementById("locationStatus"),
       forecastStatus: document.getElementById("forecastStatus"),
       forecastContent: document.getElementById("forecastContent"),
@@ -495,7 +505,6 @@
 
     const map = L.map("map").setView([40.7128, -74.0060], 5);
 
-    // Standard OpenStreetMap tiles; no map API key required.
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -562,7 +571,8 @@
         longitude: Number(elements.longitude.value),
         tilt: Number(elements.tilt.value),
         azimuth: Number(elements.azimuth.value),
-        peakPower: Number(elements.peakPower.value)
+        peakPower: Number(elements.peakPower.value),
+        lossPercent: Number(elements.lossPercent.value)
       };
     }
 
@@ -576,7 +586,9 @@
         Number.isFinite(settings.azimuth) &&
         settings.azimuth >= -180 && settings.azimuth <= 180 &&
         Number.isFinite(settings.peakPower) &&
-        settings.peakPower > 0;
+        settings.peakPower > 0 &&
+        Number.isFinite(settings.lossPercent) &&
+        settings.lossPercent >= 0 && settings.lossPercent <= 100;
     }
 
     function renderFavorites() {
@@ -626,6 +638,7 @@
       elements.tilt.value = favorite.tilt;
       elements.azimuth.value = favorite.azimuth;
       elements.peakPower.value = favorite.peakPower;
+      elements.lossPercent.value = favorite.lossPercent ?? 14;
 
       updateSelectedNameDisplay();
       setFavoriteParameterStyle(true);
@@ -637,7 +650,6 @@
         setMapLocation(latitude, longitude, 8);
       }
 
-      // Close the menu, load the forecast, and scroll to it.
       setSidebarOpen(false);
       const forecastPromise = fetchForecast();
 
@@ -659,6 +671,42 @@
       } else {
         marker = L.marker([latitude, longitude]).addTo(map);
       }
+    }
+
+    function useDeviceLocation() {
+      if (!navigator.geolocation) {
+        elements.locationStatus.classList.add("error");
+        elements.locationStatus.textContent = "Geolocation is not supported by this browser.";
+        return;
+      }
+
+      elements.locationStatus.classList.remove("error");
+      elements.locationStatus.textContent = "Getting your location…";
+
+      navigator.geolocation.getCurrentPosition(
+        position => {
+          const latitude = position.coords.latitude;
+          const longitude = position.coords.longitude;
+
+          elements.latitude.value = latitude.toFixed(6);
+          elements.longitude.value = longitude.toFixed(6);
+          clearFavoriteSelection(true);
+          setMapLocation(latitude, longitude, 12);
+
+          elements.locationStatus.textContent =
+            `Using device location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+        },
+        () => {
+          elements.locationStatus.classList.add("error");
+          elements.locationStatus.textContent =
+            "Could not access your device location. Please allow location access.";
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 60000
+        }
+      );
     }
 
     map.on("click", event => {
@@ -729,6 +777,8 @@
     document.getElementById("searchButton")
       .addEventListener("click", searchPlace);
 
+    elements.locateButton.addEventListener("click", useDeviceLocation);
+
     elements.placeSearch.addEventListener("keydown", event => {
       if (event.key === "Enter") searchPlace();
     });
@@ -748,7 +798,7 @@
       if (!settingsAreValid(settings)) {
         elements.forecastStatus.classList.add("error");
         elements.forecastStatus.textContent =
-          "Check the coordinates, tilt, azimuth, and peak power values.";
+          "Check the coordinates, tilt, azimuth, peak power, and system losses values.";
         return;
       }
 
@@ -790,7 +840,7 @@
       if (!settingsAreValid(settings)) {
         elements.forecastStatus.classList.add("error");
         elements.forecastStatus.textContent =
-          "Check the coordinates, tilt, azimuth, and peak power values.";
+          "Check the coordinates, tilt, azimuth, peak power, and system losses values.";
         return;
       }
 
@@ -824,6 +874,7 @@
           );
         }
 
+        const lossFactor = 1 - settings.lossPercent / 100;
         const dailyTotals = new Map();
 
         times.forEach((time, index) => {
@@ -833,10 +884,9 @@
           if (!dailyTotals.has(date)) dailyTotals.set(date, 0);
 
           if (Number.isFinite(value)) {
-            // Hourly average W/m² × panel power kW ÷ 1000 = estimated kWh.
             dailyTotals.set(
               date,
-              dailyTotals.get(date) + value * settings.peakPower / 1000
+              dailyTotals.get(date) + value * settings.peakPower * lossFactor / 1000
             );
           }
         });
@@ -878,9 +928,7 @@
 
       const labels = rows.map(row => formatDate(row.date));
       const dailyValues = rows.map(row => Number(row.energy.toFixed(3)));
-      const cumulativeValues = rows.map(row =>
-        Number(row.cumulative.toFixed(3))
-      );
+      const cumulativeValues = rows.map(row => Number(row.cumulative.toFixed(3)));
 
       const total = rows.length ? rows[rows.length - 1].cumulative : 0;
       const average = rows.length ? total / rows.length : 0;
@@ -913,7 +961,13 @@
         },
         scales: {
           x: {
-            ticks: { color: "#9da7b3", maxRotation: 45, minRotation: 0 },
+            ticks: {
+              color: "#9da7b3",
+              autoSkip: false,
+              maxTicksLimit: 16,
+              maxRotation: 45,
+              minRotation: 0
+            },
             grid: { color: "rgba(157, 167, 179, 0.12)" }
           },
           y: {
