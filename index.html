@@ -354,6 +354,7 @@
       <div id="locationStatus" class="status">
         Search for a place, click the map, or use your device location.
       </div>
+      <div id="locationAccuracy" class="help-text" aria-live="polite"></div>
     </section>
 
     <section class="card">
@@ -487,6 +488,7 @@
       placeSearch: document.getElementById("placeSearch"),
       locateButton: document.getElementById("locateButton"),
       locationStatus: document.getElementById("locationStatus"),
+      locationAccuracy: document.getElementById("locationAccuracy"),
       forecastStatus: document.getElementById("forecastStatus"),
       forecastContent: document.getElementById("forecastContent"),
       forecastResults: document.getElementById("forecastResults"),
@@ -501,6 +503,7 @@
     let dailyChart = null;
     let cumulativeChart = null;
     let marker = null;
+    let locationAccuracyCircle = null;
     let forecastRequestId = 0;
 
     const map = L.map("map").setView([40.7128, -74.0060], 5);
@@ -510,6 +513,17 @@
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19
     }).addTo(map);
+
+    function setLocationAccuracyText(text) {
+      elements.locationAccuracy.textContent = text || "";
+    }
+
+    function clearLocationAccuracyCircle() {
+      if (locationAccuracyCircle) {
+        map.removeLayer(locationAccuracyCircle);
+        locationAccuracyCircle = null;
+      }
+    }
 
     function loadFavorites() {
       try {
@@ -639,6 +653,8 @@
       elements.azimuth.value = favorite.azimuth;
       elements.peakPower.value = favorite.peakPower;
       elements.lossPercent.value = favorite.lossPercent ?? 14;
+      setLocationAccuracyText("");
+      clearLocationAccuracyCircle();
 
       updateSelectedNameDisplay();
       setFavoriteParameterStyle(true);
@@ -663,7 +679,7 @@
       await forecastPromise;
     }
 
-    function setMapLocation(latitude, longitude, zoom = 9) {
+    function setMapLocation(latitude, longitude, zoom = 9, accuracyMeters = null) {
       map.setView([latitude, longitude], zoom);
 
       if (marker) {
@@ -671,28 +687,86 @@
       } else {
         marker = L.marker([latitude, longitude]).addTo(map);
       }
+
+      if (accuracyMeters != null && Number.isFinite(accuracyMeters) && accuracyMeters >= 0) {
+        clearLocationAccuracyCircle();
+        locationAccuracyCircle = L.circle([latitude, longitude], {
+          radius: accuracyMeters,
+          color: "#58a6ff",
+          fillColor: "#58a6ff",
+          fillOpacity: 0.14,
+          weight: 1
+        }).addTo(map);
+      } else {
+        clearLocationAccuracyCircle();
+      }
+    }
+
+    async function reverseGeocodeLocation(latitude, longitude) {
+      try {
+        const url = new URL("https://nominatim.openstreetmap.org/reverse");
+        url.searchParams.set("format", "jsonv2");
+        url.searchParams.set("lat", String(latitude));
+        url.searchParams.set("lon", String(longitude));
+        url.searchParams.set("zoom", "10");
+        url.searchParams.set("addressdetails", "1");
+
+        const response = await fetch(url, {
+          headers: {
+            "Accept-Language": "en"
+          }
+        });
+
+        if (!response.ok) return null;
+
+        const data = await response.json();
+        const address = data.address || {};
+        const parts = [
+          address.city,
+          address.town,
+          address.village,
+          address.municipality,
+          address.county,
+          address.state,
+          address.country
+        ].filter(Boolean);
+
+        return parts.length ? parts.join(", ") : data.display_name || null;
+      } catch {
+        return null;
+      }
     }
 
     function useDeviceLocation() {
       if (!navigator.geolocation) {
         elements.locationStatus.classList.add("error");
         elements.locationStatus.textContent = "Geolocation is not supported by this browser.";
+        setLocationAccuracyText("");
         return;
       }
 
       elements.locationStatus.classList.remove("error");
       elements.locationStatus.textContent = "Getting your location…";
+      setLocationAccuracyText("");
 
       navigator.geolocation.getCurrentPosition(
-        position => {
+        async position => {
           const latitude = position.coords.latitude;
           const longitude = position.coords.longitude;
+          const accuracyMeters = position.coords.accuracy;
 
           elements.latitude.value = latitude.toFixed(6);
           elements.longitude.value = longitude.toFixed(6);
           clearFavoriteSelection(true);
-          setMapLocation(latitude, longitude, 12);
+          setMapLocation(latitude, longitude, 12, accuracyMeters);
 
+          const placeName = await reverseGeocodeLocation(latitude, longitude);
+          if (placeName) {
+            elements.name.value = placeName;
+            updateSelectedNameDisplay();
+          }
+
+          setLocationAccuracyText(`Location accuracy: ±${Math.round(accuracyMeters)} m`);
           elements.locationStatus.textContent =
             `Using device location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
         },
@@ -700,6 +774,7 @@
           elements.locationStatus.classList.add("error");
           elements.locationStatus.textContent =
             "Could not access your device location. Please allow location access.";
+          setLocationAccuracyText("");
         },
         {
           enableHighAccuracy: true,
@@ -714,8 +789,8 @@
       elements.latitude.value = lat.toFixed(6);
       elements.longitude.value = lng.toFixed(6);
       setMapLocation(lat, lng, map.getZoom());
-
       clearFavoriteSelection(true);
+      setLocationAccuracyText("");
       elements.locationStatus.textContent =
         `Selected coordinates: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
     });
@@ -725,11 +800,13 @@
 
       if (!query) {
         elements.locationStatus.textContent = "Enter a place name to search.";
+        setLocationAccuracyText("");
         return;
       }
 
       elements.locationStatus.classList.remove("error");
       elements.locationStatus.textContent = "Searching…";
+      setLocationAccuracyText("");
 
       try {
         const url = new URL("https://photon.komoot.io/api/");
@@ -825,6 +902,8 @@
 
     document.getElementById("clearSelectionButton").addEventListener("click", () => {
       clearFavoriteSelection(true);
+      setLocationAccuracyText("");
+      clearLocationAccuracyCircle();
       elements.forecastStatus.textContent = "Favorite selection cleared.";
     });
 
