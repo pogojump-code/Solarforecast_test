@@ -1,13 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0d1117">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0d1117" />
   <title>Solar Production Forecast</title>
-
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     :root {
       color-scheme: dark;
@@ -20,15 +18,15 @@
       --accent: #f0b429;
       --accent-hover: #ffc94d;
       --danger: #ff7b72;
+      --good: #6ee7b7;
+      --charge: #79d4ff;
+      --consume: #f5a623;
+      --unused: #8b95a7;
+      --shadow: rgba(0,0,0,.35);
     }
 
     * { box-sizing: border-box; }
-
-    html {
-      scroll-behavior: smooth;
-      scroll-padding-top: 76px;
-    }
-
+    html { scroll-behavior: smooth; scroll-padding-top: 76px; }
     body {
       margin: 0;
       background: var(--bg);
@@ -36,7 +34,7 @@
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    button, input { font: inherit; }
+    button, input, select { font: inherit; }
     button { cursor: pointer; }
 
     .topbar {
@@ -58,7 +56,8 @@
     .secondary-button,
     .favorite-button,
     .favorite-action-button,
-    .favorite-delete-button {
+    .favorite-delete-button,
+    .mini-button {
       border: 1px solid var(--border);
       border-radius: 8px;
       color: var(--text);
@@ -70,7 +69,8 @@
     .secondary-button:hover,
     .favorite-button:hover,
     .favorite-action-button:hover,
-    .favorite-delete-button:hover { background: #293442; }
+    .favorite-delete-button:hover,
+    .mini-button:hover { background: #293442; }
 
     .app-title {
       margin: 0;
@@ -103,7 +103,6 @@
     }
 
     .sidebar.collapsed { transform: translateX(-100%); }
-
     .sidebar h2 {
       margin: 0 0 12px;
       font-size: 1rem;
@@ -113,7 +112,8 @@
     .help-text,
     .status {
       color: var(--muted);
-      font-size: 0.88rem;
+      font-size: 0.82rem;
+      line-height: 1.4;
     }
 
     .favorite-list {
@@ -134,14 +134,23 @@
       padding: 9px 10px;
       overflow: hidden;
       text-align: left;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      white-space: normal;
+      line-height: 1.3;
+      word-break: break-word;
+      font-size: 0.76rem;
     }
 
     .favorite-action-button,
     .favorite-delete-button {
-      padding: 8px 9px;
-      min-width: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      padding: 0;
+      font-size: 1rem;
+      line-height: 1;
+      flex-shrink: 0;
     }
 
     .favorite-delete-button {
@@ -193,6 +202,7 @@
     }
 
     .field input,
+    .field select,
     .search-row input {
       width: 100%;
       padding: 9px 10px;
@@ -207,7 +217,6 @@
     }
 
     .preset-name-field input { max-width: 480px; }
-
     .parameter-input.favorite-selected {
       font-weight: 800;
       border-color: var(--accent);
@@ -222,7 +231,8 @@
     }
 
     .primary-button,
-    .secondary-button { padding: 9px 13px; }
+    .secondary-button,
+    .mini-button { padding: 9px 13px; }
 
     .primary-button {
       color: #151515;
@@ -319,6 +329,50 @@
       height: 220px;
     }
 
+    .battery-wrapper {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .battery-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .battery-header h3 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .battery-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(110px, 1fr));
+      gap: 12px;
+    }
+
+    .battery-rows {
+      display: grid;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .battery-window-row {
+      display: grid;
+      grid-template-columns: 120px 120px 120px 120px;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .inline-label {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.3;
+    }
+
     .table-wrap { overflow-x: auto; }
 
     table {
@@ -349,26 +403,28 @@
         margin-left: 0;
         width: 100%;
       }
-
-      .sidebar { box-shadow: 12px 0 32px rgba(0, 0, 0, 0.35); }
+      .sidebar { box-shadow: 12px 0 32px rgba(0,0,0,.35); }
       main { padding: 14px; }
       .form-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+      .battery-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+      .battery-window-row { grid-template-columns: repeat(2, minmax(100px, 1fr)); }
     }
 
     @media (max-width: 520px) {
       .app-title { font-size: 0.95rem; }
       .selected-name { max-width: 38vw; font-size: 0.87rem; }
       .summary { grid-template-columns: 1fr; }
+      .battery-grid { grid-template-columns: 1fr; }
+      .battery-window-row { grid-template-columns: 1fr; }
       #map { height: 290px; }
       .chart-wrap { height: 270px; }
+      .favorite-button { font-size: 0.72rem; }
     }
   </style>
 </head>
-
 <body class="sidebar-open">
   <header class="topbar">
-    <button id="menuToggle" class="menu-button" type="button"
-      aria-label="Collapse favorites menu" aria-expanded="true">☰</button>
+    <button id="menuToggle" class="menu-button" type="button" aria-label="Collapse favorites menu" aria-expanded="true">☰</button>
     <h1 class="app-title">Solar Forecast</h1>
     <div id="selectedNameDisplay" class="selected-name" aria-live="polite"></div>
   </header>
@@ -384,15 +440,12 @@
     <section class="card">
       <h2>Location</h2>
       <div class="search-row">
-        <input id="placeSearch" type="search" placeholder="Search for a place"
-          autocomplete="off">
+        <input id="placeSearch" type="search" placeholder="Search for a place" autocomplete="off" />
         <button id="searchButton" class="primary-button" type="button">Search</button>
         <button id="locateButton" class="secondary-button" type="button">Use my location</button>
       </div>
       <div id="map" aria-label="Select a location on the map"></div>
-      <div id="locationStatus" class="status">
-        Search for a place, click the map, or use your device location.
-      </div>
+      <div id="locationStatus" class="status">Search for a place, click the map, or use your device location.</div>
       <div id="locationAccuracy" class="help-text" aria-live="polite"></div>
     </section>
 
@@ -401,67 +454,139 @@
 
       <div class="field preset-name-field">
         <label for="favoriteName">Favorite / place name</label>
-        <input id="favoriteName" type="text"
-          placeholder="Enter a name to save these settings">
+        <input id="favoriteName" type="text" placeholder="Enter a name to save these settings" />
       </div>
 
       <div class="form-grid">
         <div class="field">
           <label for="latitude">Latitude</label>
-          <input class="parameter-input" id="latitude" type="number"
-            step="any" value="40.7128">
+          <input class="parameter-input" id="latitude" type="number" step="any" value="40.7128" />
         </div>
         <div class="field">
           <label for="longitude">Longitude</label>
-          <input class="parameter-input" id="longitude" type="number"
-            step="any" value="-74.0060">
+          <input class="parameter-input" id="longitude" type="number" step="any" value="-74.0060" />
         </div>
         <div class="field">
           <label for="tilt">Panel tilt (°)</label>
-          <input class="parameter-input" id="tilt" type="number"
-            min="0" max="90" step="1" value="0">
+          <input class="parameter-input" id="tilt" type="number" min="0" max="90" step="1" value="0" />
         </div>
         <div class="field">
           <label for="azimuth">Panel azimuth (°)</label>
-          <input class="parameter-input" id="azimuth" type="number"
-            min="-180" max="180" step="1" value="0">
+          <input class="parameter-input" id="azimuth" type="number" min="-180" max="180" step="1" value="0" />
         </div>
         <div class="field">
           <label for="peakPower">Peak power (kW)</label>
-          <input class="parameter-input" id="peakPower" type="number"
-            min="0.001" step="any" value="0.285">
+          <input class="parameter-input" id="peakPower" type="number" min="0.001" step="any" value="0.285" />
         </div>
         <div class="field">
           <label for="lossPercent">System losses (%)</label>
-          <input class="parameter-input" id="lossPercent" type="number"
-            min="0" max="100" step="0.1" value="14">
+          <input class="parameter-input" id="lossPercent" type="number" min="0" max="100" step="0.1" value="14" />
+        </div>
+      </div>
+
+      <div class="battery-wrapper">
+        <div class="battery-header">
+          <h3>Battery mode</h3>
+          <label class="inline-label"><input id="batteryModeEnabled" type="checkbox" /> Enable battery mode</label>
+        </div>
+
+        <div id="batterySettingsBlock" class="battery-grid" style="display:none;">
+          <div class="field">
+            <label for="batteryCapacity">Battery capacity</label>
+            <input id="batteryCapacity" type="number" min="0" step="0.1" value="5" />
+          </div>
+          <div class="field">
+            <label for="batteryCapacityUnit">Unit</label>
+            <select id="batteryCapacityUnit">
+              <option value="kwh">kWh</option>
+              <option value="ah12.8">Ah 12.8V</option>
+              <option value="ah25.6">Ah 25.6V</option>
+              <option value="ah51.2">Ah 51.2V</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="batteryMinLevel">Min level (%)</label>
+            <input id="batteryMinLevel" type="number" min="0" max="100" step="1" value="20" />
+          </div>
+          <div class="field">
+            <label for="consumptionMode">Consumption</label>
+            <select id="consumptionMode">
+              <option value="constant-day">Constant / day</option>
+              <option value="windows">Selected windows</option>
+              <option value="hourly">Hour by hour</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="batteryDynamicBlock" class="battery-grid" style="display:none; margin-top:12px;">
+          <div class="field">
+            <label for="batteryLevelValue">Battery level now</label>
+            <input id="batteryLevelValue" type="number" min="0" step="0.1" value="80" />
+          </div>
+          <div class="field">
+            <label for="batteryLevelUnit">Level unit</label>
+            <select id="batteryLevelUnit">
+              <option value="percent">%</option>
+              <option value="kwh">kWh</option>
+              <option value="ah12.8">Ah 12.8V</option>
+              <option value="ah25.6">Ah 25.6V</option>
+              <option value="ah51.2">Ah 51.2V</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="consumptionValue">Consumption</label>
+            <input id="consumptionValue" type="number" min="0" step="0.1" value="1.5" />
+          </div>
+          <div class="field">
+            <label for="consumptionUnit">Per</label>
+            <select id="consumptionUnit">
+              <option value="hour">Hour</option>
+              <option value="day">Day</option>
+              <option value="week">Week</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="batteryWindowsBlock" class="battery-rows" style="display:none;">
+          <div class="battery-window-row">
+            <div class="field">
+              <label for="windowStart1">Window start</label>
+              <input id="windowStart1" type="time" value="08:00" />
+            </div>
+            <div class="field">
+              <label for="windowEnd1">Window end</label>
+              <input id="windowEnd1" type="time" value="18:00" />
+            </div>
+            <div class="field">
+              <label for="windowValue1">Load (kW)</label>
+              <input id="windowValue1" type="number" min="0" step="0.1" value="1.2" />
+            </div>
+            <div class="field">
+              <label for="windowAdd1">&nbsp;</label>
+              <button type="button" class="mini-button" data-add-window>+ Add window</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="batteryHourlyBlock" class="battery-rows" style="display:none;">
+          <div class="inline-label">Hourly consumption profile (kW / hour)</div>
+          <div id="hourlyConsumptionGrid" class="battery-grid"></div>
         </div>
       </div>
 
       <div class="button-row">
-        <button id="forecastButton" class="primary-button" type="button">
-          Get 16-day forecast
-        </button>
-        <button id="saveFavoriteButton" class="secondary-button" type="button">
-          Save as new favorite
-        </button>
-        <button id="clearSelectionButton" class="secondary-button" type="button">
-          Clear favorite selection
-        </button>
+        <button id="forecastButton" class="primary-button" type="button">Get 16-day forecast</button>
+        <button id="saveFavoriteButton" class="secondary-button" type="button">Save as new favorite</button>
+        <button id="clearSelectionButton" class="secondary-button" type="button">Clear favorite selection</button>
       </div>
 
       <div id="forecastStatus" class="status" role="status"></div>
-      <p class="help-text">
-        Azimuth convention: 0° = south, −90° = east, 90° = west, and ±180° = north.
-        System losses estimate wiring, inverter, soiling, temperature, and other efficiency reductions.
-      </p>
+      <p class="help-text">Azimuth convention: 0° = south, −90° = east, 90° = west, and ±180° = north. System losses estimate wiring, inverter, soiling, temperature, and other efficiency reductions.</p>
     </section>
 
     <section id="forecast" class="card">
       <h2>Daily energy forecast</h2>
-      <div id="forecastContent" class="empty-state">
-        Select a location and request a forecast.
-      </div>
+      <div id="forecastContent" class="empty-state">Select a location and request a forecast.</div>
 
       <div id="forecastResults" hidden>
         <div class="summary">
@@ -540,7 +665,21 @@
       periodSummary: document.getElementById("periodSummary"),
       totalSummary: document.getElementById("totalSummary"),
       averageSummary: document.getElementById("averageSummary"),
-      hourlyChartsContainer: document.getElementById("hourlyChartsContainer")
+      hourlyChartsContainer: document.getElementById("hourlyChartsContainer"),
+      batteryModeEnabled: document.getElementById("batteryModeEnabled"),
+      batterySettingsBlock: document.getElementById("batterySettingsBlock"),
+      batteryDynamicBlock: document.getElementById("batteryDynamicBlock"),
+      batteryCapacity: document.getElementById("batteryCapacity"),
+      batteryCapacityUnit: document.getElementById("batteryCapacityUnit"),
+      batteryMinLevel: document.getElementById("batteryMinLevel"),
+      consumptionMode: document.getElementById("consumptionMode"),
+      batteryLevelValue: document.getElementById("batteryLevelValue"),
+      batteryLevelUnit: document.getElementById("batteryLevelUnit"),
+      consumptionValue: document.getElementById("consumptionValue"),
+      consumptionUnit: document.getElementById("consumptionUnit"),
+      batteryWindowsBlock: document.getElementById("batteryWindowsBlock"),
+      batteryHourlyBlock: document.getElementById("batteryHourlyBlock"),
+      hourlyConsumptionGrid: document.getElementById("hourlyConsumptionGrid")
     };
 
     let favorites = loadFavorites();
@@ -551,12 +690,20 @@
     let locationAccuracyCircle = null;
     let hourlyCharts = [];
     let forecastRequestId = 0;
+    let nextWindowId = 2;
+
+    const batteryColors = {
+      charge: "#79d4ff",
+      consume: "#f5a623",
+      unused: "#8b95a7",
+      shortfall: "#ff7b72",
+      batteryLine: "#6ee7b7"
+    };
 
     const map = L.map("map").setView([40.7128, -74.0060], 5);
 
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19
     }).addTo(map);
 
@@ -592,10 +739,7 @@
       elements.sidebar.classList.toggle("collapsed", !open);
       document.body.classList.toggle("sidebar-open", open);
       elements.menuToggle.setAttribute("aria-expanded", String(open));
-      elements.menuToggle.setAttribute(
-        "aria-label",
-        open ? "Collapse favorites menu" : "Open favorites menu"
-      );
+      elements.menuToggle.setAttribute("aria-label", open ? "Collapse favorites menu" : "Open favorites menu");
       setTimeout(() => map.invalidateSize(), 220);
     }
 
@@ -618,7 +762,6 @@
     function clearFavoriteSelection(clearName = true) {
       activeFavoriteId = null;
       setFavoriteParameterStyle(false);
-
       if (clearName) {
         elements.name.value = "";
         updateSelectedNameDisplay();
@@ -636,26 +779,206 @@
       };
     }
 
-    function settingsAreValid(settings) {
-      return Number.isFinite(settings.latitude) &&
-        settings.latitude >= -90 && settings.latitude <= 90 &&
-        Number.isFinite(settings.longitude) &&
-        settings.longitude >= -180 && settings.longitude <= 180 &&
-        Number.isFinite(settings.tilt) &&
-        settings.tilt >= 0 && settings.tilt <= 90 &&
-        Number.isFinite(settings.azimuth) &&
-        settings.azimuth >= -180 && settings.azimuth <= 180 &&
-        Number.isFinite(settings.peakPower) &&
-        settings.peakPower > 0 &&
-        Number.isFinite(settings.lossPercent) &&
-        settings.lossPercent >= 0 && settings.lossPercent <= 100;
+    function getBatterySettings() {
+      return {
+        batteryMode: elements.batteryModeEnabled.checked,
+        batteryCapacity: Number(elements.batteryCapacity.value),
+        batteryCapacityUnit: elements.batteryCapacityUnit.value,
+        batteryMinLevel: Number(elements.batteryMinLevel.value),
+        consumptionMode: elements.consumptionMode.value,
+        consumptionValue: Number(elements.consumptionValue.value),
+        consumptionUnit: elements.consumptionUnit.value,
+        batteryLevelValue: Number(elements.batteryLevelValue.value),
+        batteryLevelUnit: elements.batteryLevelUnit.value,
+        timeWindows: getTimeWindows(),
+        hourlyConsumption: getHourlyConsumptionArray()
+      };
     }
+
+    function settingsAreValid(settings) {
+      return Number.isFinite(settings.latitude) && settings.latitude >= -90 && settings.latitude <= 90 &&
+        Number.isFinite(settings.longitude) && settings.longitude >= -180 && settings.longitude <= 180 &&
+        Number.isFinite(settings.tilt) && settings.tilt >= 0 && settings.tilt <= 90 &&
+        Number.isFinite(settings.azimuth) && settings.azimuth >= -180 && settings.azimuth <= 180 &&
+        Number.isFinite(settings.peakPower) && settings.peakPower > 0 &&
+        Number.isFinite(settings.lossPercent) && settings.lossPercent >= 0 && settings.lossPercent <= 100;
+    }
+
+    function makeBatteryFavoriteValue(battery) {
+      const value = { ...battery };
+      if (!value.batteryMode) return null;
+      delete value.batteryLevelValue;
+      delete value.batteryLevelUnit;
+      return value;
+    }
+
+    function loadBatteryInputsFromFavorite(favorite) {
+      const battery = favorite.battery || {};
+      elements.batteryModeEnabled.checked = !!battery.batteryMode;
+      elements.batteryCapacity.value = battery.batteryCapacity ?? 5;
+      elements.batteryCapacityUnit.value = battery.batteryCapacityUnit || "kwh";
+      elements.batteryMinLevel.value = battery.batteryMinLevel ?? 20;
+      elements.consumptionMode.value = battery.consumptionMode || "constant-day";
+      elements.consumptionValue.value = battery.consumptionValue ?? 1.5;
+      elements.consumptionUnit.value = battery.consumptionUnit || "hour";
+      elements.batteryLevelValue.value = battery.batteryLevelValue ?? 80;
+      elements.batteryLevelUnit.value = battery.batteryLevelUnit || "percent";
+      if (Array.isArray(battery.timeWindows) && battery.timeWindows.length) {
+        restoreTimeWindows(battery.timeWindows);
+      } else {
+        restoreTimeWindows([{ id: 1, start: "08:00", end: "18:00", value: 1.2 }]);
+      }
+      if (Array.isArray(battery.hourlyConsumption) && battery.hourlyConsumption.length) {
+        restoreHourlyProfile(battery.hourlyConsumption);
+      } else {
+        restoreHourlyProfile(buildDefaultHourlyProfile());
+      }
+      syncBatteryUi();
+    }
+
+    function buildDefaultHourlyProfile() {
+      return Array.from({ length: 24 }, (_, hour) => ({ hour, value: hour >= 8 && hour <= 18 ? 0.6 : 0 }));
+    }
+
+    function createHourlyField(hour, value) {
+      const wrap = document.createElement("div");
+      wrap.className = "field";
+      const label = document.createElement("label");
+      label.textContent = `${String(hour).padStart(2, "0")}:00`;
+      label.setAttribute("for", `hour-${hour}`);
+      const input = document.createElement("input");
+      input.id = `hour-${hour}`;
+      input.type = "number";
+      input.step = "0.1";
+      input.min = "0";
+      input.value = Number(value || 0).toFixed(1);
+      wrap.appendChild(label);
+      wrap.appendChild(input);
+      return wrap;
+    }
+
+    function renderHourlyProfile(values) {
+      elements.hourlyConsumptionGrid.replaceChildren();
+      values.forEach((entry) => {
+        elements.hourlyConsumptionGrid.appendChild(createHourlyField(entry.hour, entry.value));
+      });
+    }
+
+    function restoreHourlyProfile(values) {
+      const normalized = Array.from({ length: 24 }, (_, hour) => ({
+        hour,
+        value: Number(values && values[hour] ? values[hour].value : 0)
+      }));
+      renderHourlyProfile(normalized);
+    }
+
+    function buildWindowRow(windowInfo) {
+      const row = document.createElement("div");
+      row.className = "battery-window-row";
+      row.dataset.windowId = String(windowInfo.id);
+
+      const start = document.createElement("input");
+      start.type = "time";
+      start.value = windowInfo.start;
+      start.setAttribute("aria-label", "Window start time");
+
+      const end = document.createElement("input");
+      end.type = "time";
+      end.value = windowInfo.end;
+      end.setAttribute("aria-label", "Window end time");
+
+      const value = document.createElement("input");
+      value.type = "number";
+      value.min = "0";
+      value.step = "0.1";
+      value.value = String(windowInfo.value);
+      value.setAttribute("aria-label", "Window load value");
+
+      const action = document.createElement("button");
+      action.type = "button";
+      action.className = "mini-button";
+      action.textContent = "Remove";
+      action.addEventListener("click", () => {
+        row.remove();
+      });
+
+      row.appendChild(createFieldBox("Window start", start));
+      row.appendChild(createFieldBox("Window end", end));
+      row.appendChild(createFieldBox("Load (kW)", value));
+      row.appendChild(action);
+      return row;
+    }
+
+    function createFieldBox(labelText, inputEl) {
+      const field = document.createElement("div");
+      field.className = "field";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      field.appendChild(label);
+      field.appendChild(inputEl);
+      return field;
+    }
+
+    function getTimeWindows() {
+      const rows = elements.batteryWindowsBlock.querySelectorAll(".battery-window-row");
+      const windows = [];
+      rows.forEach((row) => {
+        const inputs = row.querySelectorAll("input");
+        const start = inputs[0]?.value;
+        const end = inputs[1]?.value;
+        const value = Number(inputs[2]?.value || 0);
+        if (start && end) {
+          windows.push({ id: Number(row.dataset.windowId || Date.now()), start, end, value });
+        }
+      });
+      return windows;
+    }
+
+    function restoreTimeWindows(windows) {
+      elements.batteryWindowsBlock.querySelectorAll(".battery-window-row").forEach((row) => row.remove());
+      if (!windows || !windows.length) {
+        const row = buildWindowRow({ id: 1, start: "08:00", end: "18:00", value: 1.2 });
+        elements.batteryWindowsBlock.appendChild(row);
+        return;
+      }
+      windows.forEach((item) => {
+        elements.batteryWindowsBlock.appendChild(buildWindowRow({ id: item.id || 1, start: item.start || "08:00", end: item.end || "18:00", value: item.value ?? 1.2 }));
+      });
+    }
+
+    function getHourlyConsumptionArray() {
+      const inputs = elements.hourlyConsumptionGrid.querySelectorAll("input");
+      const values = [];
+      inputs.forEach((input) => {
+        const hour = Number(input.id.replace("hour-", ""));
+        values[hour] = { hour, value: Number(input.value || 0) };
+      });
+      return values.filter(Boolean);
+    }
+
+    function syncBatteryUi() {
+      const enabled = elements.batteryModeEnabled.checked;
+      elements.batterySettingsBlock.style.display = enabled ? "grid" : "none";
+      elements.batteryDynamicBlock.style.display = enabled ? "grid" : "none";
+      elements.batteryWindowsBlock.style.display = enabled && elements.consumptionMode.value === "windows" ? "grid" : "none";
+      elements.batteryHourlyBlock.style.display = enabled && elements.consumptionMode.value === "hourly" ? "grid" : "none";
+    }
+
+    elements.batteryModeEnabled.addEventListener("change", syncBatteryUi);
+    elements.consumptionMode.addEventListener("change", syncBatteryUi);
+
+    function addWindowRow() {
+      const row = buildWindowRow({ id: nextWindowId++, start: "08:00", end: "18:00", value: 1.0 });
+      elements.batteryWindowsBlock.appendChild(row);
+    }
+
+    document.querySelector("[data-add-window]")?.addEventListener("click", addWindowRow);
 
     function renderFavorites() {
       elements.favoriteList.replaceChildren();
       elements.noFavorites.hidden = favorites.length > 0;
 
-      favorites.forEach(favorite => {
+      favorites.forEach((favorite) => {
         const row = document.createElement("div");
         row.className = "favorite-row";
 
@@ -669,10 +992,10 @@
         const modifyButton = document.createElement("button");
         modifyButton.type = "button";
         modifyButton.className = "favorite-action-button";
-        modifyButton.textContent = "Modify";
+        modifyButton.innerHTML = "✏️";
         modifyButton.title = "Modify " + favorite.name;
         modifyButton.setAttribute("aria-label", "Modify " + favorite.name);
-        modifyButton.addEventListener("click", event => {
+        modifyButton.addEventListener("click", (event) => {
           event.stopPropagation();
           loadFavoriteForEditing(favorite);
         });
@@ -680,21 +1003,15 @@
         const deleteButton = document.createElement("button");
         deleteButton.type = "button";
         deleteButton.className = "favorite-delete-button";
-        deleteButton.textContent = "Delete";
+        deleteButton.innerHTML = "🗑️";
         deleteButton.title = "Delete " + favorite.name;
         deleteButton.setAttribute("aria-label", "Delete " + favorite.name);
-
-        deleteButton.addEventListener("click", event => {
+        deleteButton.addEventListener("click", (event) => {
           event.stopPropagation();
           const confirmed = window.confirm(`Delete favorite “${favorite.name}”?`);
           if (!confirmed) return;
-
-          favorites = favorites.filter(item => item.id !== favorite.id);
-
-          if (activeFavoriteId === favorite.id) {
-            clearFavoriteSelection(true);
-          }
-
+          favorites = favorites.filter((item) => item.id !== favorite.id);
+          if (activeFavoriteId === favorite.id) clearFavoriteSelection(true);
           saveFavoritesToStorage();
           renderFavorites();
         });
@@ -713,44 +1030,48 @@
       elements.azimuth.value = favorite.azimuth;
       elements.peakPower.value = favorite.peakPower;
       elements.lossPercent.value = favorite.lossPercent ?? 14;
+
+      if (favorite.battery) {
+        loadBatteryInputsFromFavorite(favorite);
+      } else {
+        elements.batteryModeEnabled.checked = false;
+        elements.batteryCapacity.value = 5;
+        elements.batteryCapacityUnit.value = "kwh";
+        elements.batteryMinLevel.value = 20;
+        elements.consumptionMode.value = "constant-day";
+        elements.consumptionValue.value = 1.5;
+        elements.consumptionUnit.value = "hour";
+        elements.batteryLevelValue.value = 80;
+        elements.batteryLevelUnit.value = "percent";
+        restoreTimeWindows([{ id: 1, start: "08:00", end: "18:00", value: 1.2 }]);
+        restoreHourlyProfile(buildDefaultHourlyProfile());
+        syncBatteryUi();
+      }
+
       setLocationAccuracyText("");
       clearLocationAccuracyCircle();
-
       updateSelectedNameDisplay();
       setFavoriteParameterStyle(true);
 
       const latitude = Number(favorite.latitude);
       const longitude = Number(favorite.longitude);
-
-      if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
-        setMapLocation(latitude, longitude, 8);
-      }
-
+      if (Number.isFinite(latitude) && Number.isFinite(longitude)) setMapLocation(latitude, longitude, 8);
       setSidebarOpen(false);
     }
 
     async function selectFavorite(favorite) {
       loadFavoriteForEditing(favorite);
       const forecastPromise = fetchForecast();
-
       requestAnimationFrame(() => {
-        document.getElementById("forecast").scrollIntoView({
-          behavior: "smooth",
-          block: "start"
-        });
+        document.getElementById("forecast").scrollIntoView({ behavior: "smooth", block: "start" });
       });
-
       await forecastPromise;
     }
 
     function setMapLocation(latitude, longitude, zoom = 9, accuracyMeters = null) {
       map.setView([latitude, longitude], zoom);
-
-      if (marker) {
-        marker.setLatLng([latitude, longitude]);
-      } else {
-        marker = L.marker([latitude, longitude]).addTo(map);
-      }
+      if (marker) marker.setLatLng([latitude, longitude]);
+      else marker = L.marker([latitude, longitude]).addTo(map);
 
       if (accuracyMeters != null && Number.isFinite(accuracyMeters) && accuracyMeters >= 0) {
         clearLocationAccuracyCircle();
@@ -774,27 +1095,11 @@
         url.searchParams.set("lon", String(longitude));
         url.searchParams.set("zoom", "10");
         url.searchParams.set("addressdetails", "1");
-
-        const response = await fetch(url, {
-          headers: {
-            "Accept-Language": "en"
-          }
-        });
-
+        const response = await fetch(url, { headers: { "Accept-Language": "en" } });
         if (!response.ok) return null;
-
         const data = await response.json();
         const address = data.address || {};
-        const parts = [
-          address.city,
-          address.town,
-          address.village,
-          address.municipality,
-          address.county,
-          address.state,
-          address.country
-        ].filter(Boolean);
-
+        const parts = [address.city, address.town, address.village, address.municipality, address.county, address.state, address.country].filter(Boolean);
         return parts.length ? parts.join(", ") : data.display_name || null;
       } catch {
         return null;
@@ -814,11 +1119,10 @@
       setLocationAccuracyText("");
 
       navigator.geolocation.getCurrentPosition(
-        async position => {
+        async (position) => {
           const latitude = position.coords.latitude;
           const longitude = position.coords.longitude;
           const accuracyMeters = position.coords.accuracy;
-
           elements.latitude.value = latitude.toFixed(6);
           elements.longitude.value = longitude.toFixed(6);
           clearFavoriteSelection(true);
@@ -831,37 +1135,29 @@
           }
 
           setLocationAccuracyText(`Location accuracy: ±${Math.round(accuracyMeters)} m`);
-          elements.locationStatus.textContent =
-            `Using device location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+          elements.locationStatus.textContent = `Using device location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
         },
         () => {
           elements.locationStatus.classList.add("error");
-          elements.locationStatus.textContent =
-            "Could not access your device location. Please allow location access.";
+          elements.locationStatus.textContent = "Could not access your device location. Please allow location access.";
           setLocationAccuracyText("");
         },
-        {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 60000
-        }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
       );
     }
 
-    map.on("click", event => {
+    map.on("click", (event) => {
       const { lat, lng } = event.latlng;
       elements.latitude.value = lat.toFixed(6);
       elements.longitude.value = lng.toFixed(6);
       setMapLocation(lat, lng, map.getZoom());
       clearFavoriteSelection(true);
       setLocationAccuracyText("");
-      elements.locationStatus.textContent =
-        `Selected coordinates: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      elements.locationStatus.textContent = `Selected coordinates: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
     });
 
     async function searchPlace() {
       const query = elements.placeSearch.value.trim();
-
       if (!query) {
         elements.locationStatus.textContent = "Enter a place name to search.";
         setLocationAccuracyText("");
@@ -876,10 +1172,8 @@
         const url = new URL("https://photon.komoot.io/api/");
         url.searchParams.set("q", query);
         url.searchParams.set("limit", "5");
-
         const response = await fetch(url);
         if (!response.ok) throw new Error("Place search failed.");
-
         const data = await response.json();
         const place = data.features?.[0];
 
@@ -890,39 +1184,430 @@
 
         const [longitude, latitude] = place.geometry.coordinates;
         const props = place.properties || {};
-        const placeName = [
-          props.name,
-          props.city,
-          props.state,
-          props.country
-        ].filter(Boolean).filter((value, index, array) =>
-          array.indexOf(value) === index
-        ).join(", ") || query;
+        const placeName = [props.name, props.city, props.state, props.country].filter(Boolean).filter((value, index, array) => array.indexOf(value) === index).join(", ") || query;
 
         elements.latitude.value = Number(latitude).toFixed(6);
         elements.longitude.value = Number(longitude).toFixed(6);
         elements.name.value = placeName;
-
         clearFavoriteSelection(false);
         updateSelectedNameDisplay();
         setMapLocation(Number(latitude), Number(longitude), 10);
-
         elements.locationStatus.textContent = `Selected: ${placeName}`;
       } catch (error) {
         elements.locationStatus.classList.add("error");
-        elements.locationStatus.textContent =
-          "Could not search for that place. Check your connection and try again.";
+        elements.locationStatus.textContent = "Could not search for that place. Check your connection and try again.";
       }
     }
 
-    document.getElementById("searchButton")
-      .addEventListener("click", searchPlace);
-
+    document.getElementById("searchButton").addEventListener("click", searchPlace);
     elements.locateButton.addEventListener("click", useDeviceLocation);
-
-    elements.placeSearch.addEventListener("keydown", event => {
+    elements.placeSearch.addEventListener("keydown", (event) => {
       if (event.key === "Enter") searchPlace();
     });
+
+    function buildBatteryStateValues(batterySettings, baseState) {
+      const minPercent = Number(batterySettings.batteryMinLevel ?? 20);
+      const capacityKwh = convertCapacityToKwh(Number(batterySettings.batteryCapacity || 0), batterySettings.batteryCapacityUnit || "kwh");
+      const levelKwh = convertBatteryLevelToKwh(Number(baseState?.batteryLevelValue ?? 80), baseState?.batteryLevelUnit || "percent", capacityKwh);
+      return {
+        capacityKwh,
+        minLevelKwh: capacityKwh * (minPercent / 100),
+        currentLevelKwh: levelKwh,
+        currentLevelPercent: capacityKwh > 0 ? (levelKwh / capacityKwh) * 100 : 0
+      };
+    }
+
+    function convertCapacityToKwh(value, unit) {
+      const n = Number(value || 0);
+      if (!Number.isFinite(n) || n <= 0) return 0;
+      switch (unit) {
+        case "ah12.8": return (n * 12.8) / 1000;
+        case "ah25.6": return (n * 25.6) / 1000;
+        case "ah51.2": return (n * 51.2) / 1000;
+        default: return n;
+      }
+    }
+
+    function convertBatteryLevelToKwh(value, unit, capacityKwh) {
+      const n = Number(value || 0);
+      if (!Number.isFinite(n)) return 0;
+      if (unit === "percent") return capacityKwh * (n / 100);
+      if (unit === "kwh") return n;
+      if (unit === "ah12.8") return (n * 12.8) / 1000;
+      if (unit === "ah25.6") return (n * 25.6) / 1000;
+      if (unit === "ah51.2") return (n * 51.2) / 1000;
+      return 0;
+    }
+
+    function getConsumptionProfileForHour(dateIso, batterySettings) {
+      const hour = new Date(dateIso).getHours();
+      const mode = batterySettings.consumptionMode || "constant-day";
+      if (mode === "hourly") {
+        const profile = batterySettings.hourlyConsumption || [];
+        const match = profile.find((entry) => Number(entry.hour) === hour);
+        return Number(match?.value || 0);
+      }
+      if (mode === "windows") {
+        const windows = batterySettings.timeWindows || [];
+        for (const w of windows) {
+          const start = timeStringToMinutes(w.start);
+          const end = timeStringToMinutes(w.end);
+          const current = hour * 60 + (new Date(dateIso).getMinutes() || 0);
+          if (start < end) {
+            if (current >= start && current < end) return Number(w.value || 0);
+          } else {
+            const wrapped = current >= start || current < end;
+            if (wrapped) return Number(w.value || 0);
+          }
+        }
+        return 0;
+      }
+
+      const consumptionValue = Number(batterySettings.consumptionValue || 0);
+      const unit = batterySettings.consumptionUnit || "hour";
+      if (unit === "day") return consumptionValue / 24;
+      if (unit === "week") return consumptionValue / (7 * 24);
+      return consumptionValue;
+    }
+
+    function timeStringToMinutes(value) {
+      const [hours, minutes] = String(value || "00:00").split(":").map(Number);
+      return (Number(hours) || 0) * 60 + (Number(minutes) || 0);
+    }
+
+    function buildHourlyProductionByDay(data, settings, batteryMode = null) {
+      const lossFactor = 1 - settings.lossPercent / 100;
+      const times = Array.isArray(data?.hourly?.time) ? data.hourly.time : [];
+      const irradiance = Array.isArray(data?.hourly?.global_tilted_irradiance) ? data.hourly.global_tilted_irradiance : [];
+      const byDate = new Map();
+
+      times.forEach((time, index) => {
+        const value = Number(irradiance[index]);
+        if (!Number.isFinite(value)) return;
+        const date = time.slice(0, 10);
+        const production = value * settings.peakPower * lossFactor / 1000;
+        if (!byDate.has(date)) byDate.set(date, []);
+        const entry = {
+          time,
+          label: new Intl.DateTimeFormat(undefined, { hour: "numeric" }).format(new Date(time)),
+          production: Math.max(0, production),
+          batteryCharge: 0,
+          batteryDischarge: 0,
+          directConsumption: 0,
+          unused: 0,
+          missing: 0,
+          batteryLevel: 0,
+          batteryPercent: 0,
+          date
+        };
+        byDate.get(date).push(entry);
+      });
+
+      if (!batteryMode || !batteryMode.batteryMode) {
+        return [...byDate.entries()].slice(0, 16).map(([date, entries]) => ({
+          date,
+          entries: entries.filter((entry, idx, arr) => idx === 0 || idx === arr.length - 1 || entry.production > 0.0001)
+        }));
+      }
+
+      const state = buildBatteryStateValues(batteryMode, { batteryLevelValue: batteryMode.batteryLevelValue, batteryLevelUnit: batteryMode.batteryLevelUnit });
+      let currentLevelKwh = state.currentLevelKwh;
+
+      [...byDate.entries()].slice(0, 16).forEach(([date, entries]) => {
+        const timeSeries = entries.map((entry) => {
+          const demand = getConsumptionProfileForHour(entry.time, batteryMode);
+          const production = entry.production;
+          const directUse = Math.min(production, demand);
+          const remainingAfterDirect = Math.max(0, production - directUse);
+          const allowedChargeSpace = Math.max(0, state.capacityKwh - currentLevelKwh);
+          const charge = Math.min(remainingAfterDirect, allowedChargeSpace);
+          const unused = Math.max(0, remainingAfterDirect - charge);
+          const deficit = Math.max(0, demand - production);
+
+          let batteryDischargeNeeded = 0;
+          let actualDischarge = 0;
+          if (deficit > 0) {
+            const usableStored = Math.max(0, currentLevelKwh - state.minLevelKwh);
+            actualDischarge = Math.min(deficit, usableStored);
+            batteryDischargeNeeded = actualDischarge;
+            currentLevelKwh = Math.max(state.minLevelKwh, currentLevelKwh - actualDischarge);
+          }
+
+          if (production > directUse) {
+            currentLevelKwh = Math.min(state.capacityKwh, currentLevelKwh + charge);
+          }
+
+          const directConsumed = Math.min(demand, production) + batteryDischargeNeeded;
+          entry.directConsumption = Number((Math.min(demand, production) + batteryDischargeNeeded).toFixed(6));
+          entry.batteryCharge = Number(charge.toFixed(6));
+          entry.unused = Number(unused.toFixed(6));
+          entry.missing = Number(Math.max(0, deficit - batteryDischargeNeeded).toFixed(6));
+          entry.batteryLevel = Number(currentLevelKwh.toFixed(6));
+          entry.batteryPercent = Number(((currentLevelKwh / Math.max(state.capacityKwh, 0.0001)) * 100).toFixed(2));
+          entry.batteryDischarge = Number(actualDischarge.toFixed(6));
+          return entry;
+        });
+      });
+
+      return [...byDate.entries()].slice(0, 16).map(([date, entries]) => ({
+        date,
+        entries: entries.map((entry) => ({
+          ...entry,
+          label: new Intl.DateTimeFormat(undefined, { hour: "numeric" }).format(new Date(entry.time))
+        }))
+      }));
+    }
+
+    function formatKwh(value) {
+      const num = Number(value || 0);
+      return `${Number(num).toFixed(2)} kWh`;
+    }
+
+    function renderForecastTable(forecastDays) {
+      elements.forecastTable.innerHTML = "";
+      let cumulative = 0;
+      forecastDays.forEach((day) => {
+        const daily = day.entries.reduce((sum, entry) => sum + Number(entry.production || 0), 0);
+        cumulative += daily;
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${day.date}</td>
+          <td>${formatKwh(daily)}</td>
+          <td>${formatKwh(cumulative)}</td>
+        `;
+        elements.forecastTable.appendChild(row);
+      });
+    }
+
+    function destroyCharts() {
+      hourlyCharts.forEach((chart) => chart.destroy());
+      hourlyCharts = [];
+      if (dailyChart) dailyChart.destroy();
+      if (cumulativeChart) cumulativeChart.destroy();
+    }
+
+    function renderHourlyCharts(forecastDays, batteryMode) {
+      const container = elements.hourlyChartsContainer;
+      container.innerHTML = "";
+      hourlyCharts.forEach((chart) => chart.destroy());
+      hourlyCharts = [];
+
+      forecastDays.forEach((day) => {
+        const card = document.createElement("div");
+        card.className = "hourly-day-card";
+
+        const total = day.entries.reduce((sum, entry) => sum + Number(entry.production || 0), 0);
+        const h3 = document.createElement("h3");
+        h3.textContent = `${day.date} · total ${formatKwh(total)}`;
+        card.appendChild(h3);
+
+        const wrap = document.createElement("div");
+        wrap.className = "hourly-chart-wrap";
+        const canvas = document.createElement("canvas");
+        wrap.appendChild(canvas);
+        card.appendChild(wrap);
+        container.appendChild(card);
+
+        const labels = day.entries.map((entry) => entry.label);
+        const datasets = batteryMode && batteryMode.batteryMode ? [
+          {
+            label: "Battery charge",
+            data: day.entries.map((entry) => Number(entry.batteryCharge || 0)),
+            backgroundColor: batteryColors.charge,
+            borderRadius: 4,
+            stack: "solar"
+          },
+          {
+            label: "Real-time consumption",
+            data: day.entries.map((entry) => Number(entry.directConsumption || 0)),
+            backgroundColor: batteryColors.consume,
+            borderRadius: 4,
+            stack: "solar"
+          },
+          {
+            label: "Unused",
+            data: day.entries.map((entry) => Number(entry.unused || 0)),
+            backgroundColor: batteryColors.unused,
+            borderRadius: 4,
+            stack: "solar"
+          },
+          {
+            label: "Battery level",
+            data: day.entries.map((entry) => Number(entry.batteryLevel || 0)),
+            borderColor: batteryColors.batteryLine,
+            backgroundColor: "rgba(110,231,183,0.15)",
+            yAxisID: "y1",
+            type: "line",
+            tension: 0.3,
+            pointRadius: 0,
+            fill: false
+          }
+        ] : [
+          {
+            label: "Production",
+            data: day.entries.map((entry) => Number(entry.production || 0)),
+            backgroundColor: "#f0b429",
+            borderRadius: 4,
+            borderSkipped: false
+          }
+        ];
+
+        const chart = new Chart(canvas, {
+          type: batteryMode && batteryMode.batteryMode ? "bar" : "bar",
+          data: {
+            labels,
+            datasets
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            scales: batteryMode && batteryMode.batteryMode ? {
+              x: { stacked: true, ticks: { maxTicksLimit: 8 } },
+              y: { stacked: true, beginAtZero: true, title: { display: true, text: "kWh" } },
+              y1: {
+                position: "right",
+                beginAtZero: false,
+                grid: { drawOnChartArea: false },
+                title: { display: true, text: "Battery kWh" }
+              }
+            } : {
+              x: { ticks: { maxTicksLimit: 8 } },
+              y: { beginAtZero: true, title: { display: true, text: "kWh" } }
+            },
+            plugins: {
+              legend: { display: true },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => `${ctx.dataset.label}: ${Number(ctx.parsed.y || 0).toFixed(2)} kWh`
+                }
+              }
+            }
+          }
+        });
+
+        hourlyCharts.push(chart);
+      });
+    }
+
+    function renderDailyCharts(dailyValues) {
+      const labels = dailyValues.map((entry) => entry.date);
+      const production = dailyValues.map((entry) => Number(entry.total || 0));
+      const cumulative = dailyValues.map((entry) => Number(entry.cum || 0));
+
+      if (dailyChart) dailyChart.destroy();
+      if (cumulativeChart) cumulativeChart.destroy();
+
+      const dailyCtx = document.getElementById("dailyChart");
+      dailyChart = new Chart(dailyCtx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: "Daily energy",
+            data: production,
+            backgroundColor: "#f0b429",
+            borderRadius: 4,
+            borderSkipped: false
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, title: { display: true, text: "kWh" } }
+          }
+        }
+      });
+
+      const cumulativeCtx = document.getElementById("cumulativeChart");
+      cumulativeChart = new Chart(cumulativeCtx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: "Cumulative energy",
+            data: cumulative,
+            borderColor: "#6ee7b7",
+            backgroundColor: "rgba(110, 231, 183, 0.15)",
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, title: { display: true, text: "kWh" } }
+          }
+        }
+      });
+    }
+
+    function buildDailySummary(forecastDays) {
+      let total = 0;
+      const dailyValues = forecastDays.map((day) => {
+        const totalDay = day.entries.reduce((sum, entry) => sum + Number(entry.production || 0), 0);
+        total += totalDay;
+        return { date: day.date, total: totalDay, cum: total };
+      });
+
+      elements.periodSummary.textContent = `${forecastDays[0]?.date || "—"} → ${forecastDays[forecastDays.length - 1]?.date || "—"}`;
+      elements.totalSummary.textContent = formatKwh(total);
+      elements.averageSummary.textContent = formatKwh(total / Math.max(1, forecastDays.length));
+      renderDailyCharts(dailyValues);
+      renderForecastTable(forecastDays);
+    }
+
+    async function fetchForecast() {
+      const settings = getSettings();
+      if (!settingsAreValid(settings)) {
+        elements.forecastStatus.classList.add("error");
+        elements.forecastStatus.textContent = "Check the coordinates, tilt, azimuth, peak power, and system losses values.";
+        return;
+      }
+
+      const batterySettings = getBatterySettings();
+      const batteryEnabled = elements.batteryModeEnabled.checked;
+      const batteryMode = batteryEnabled ? batterySettings : null;
+
+      elements.forecastStatus.classList.remove("error");
+      elements.forecastStatus.textContent = "Loading forecast…";
+      elements.forecastResults.hidden = true;
+      elements.forecastContent.hidden = false;
+
+      try {
+        const latitude = Number(elements.latitude.value);
+        const longitude = Number(elements.longitude.value);
+        const url = new URL("https://api.open-meteo.com/v1/forecast");
+        url.searchParams.set("latitude", String(latitude));
+        url.searchParams.set("longitude", String(longitude));
+        url.searchParams.set("hourly", "global_tilted_irradiance");
+        url.searchParams.set("forecast_days", "16");
+        url.searchParams.set("timezone", "auto");
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Forecast unavailable");
+        const data = await response.json();
+
+        const forecastDays = buildHourlyProductionByDay(data, settings, batteryMode);
+        if (!forecastDays.length) {
+          throw new Error("No forecast data available");
+        }
+
+        elements.forecastContent.hidden = true;
+        elements.forecastResults.hidden = false;
+        buildDailySummary(forecastDays);
+        renderHourlyCharts(forecastDays, batteryMode);
+
+        elements.forecastStatus.classList.remove("error");
+        elements.forecastStatus.textContent = batteryEnabled ? "Battery-aware forecast loaded." : "Forecast loaded.";
+      } catch (error) {
+        elements.forecastStatus.classList.add("error");
+        elements.forecastStatus.textContent = "Could not load forecast. Please try again.";
+      }
+    }
 
     document.getElementById("saveFavoriteButton").addEventListener("click", () => {
       const name = elements.name.value.trim();
@@ -930,27 +1615,30 @@
 
       if (!name) {
         elements.forecastStatus.classList.add("error");
-        elements.forecastStatus.textContent =
-          "Enter a favorite name before saving.";
+        elements.forecastStatus.textContent = "Enter a favorite name before saving.";
         elements.name.focus();
         return;
       }
 
       if (!settingsAreValid(settings)) {
         elements.forecastStatus.classList.add("error");
-        elements.forecastStatus.textContent =
-          "Check the coordinates, tilt, azimuth, peak power, and system losses values.";
+        elements.forecastStatus.textContent = "Check the coordinates, tilt, azimuth, peak power, and system losses values.";
         return;
       }
 
-      const favorite = { id: makeId(), name, ...settings };
+      const batteryConfig = makeBatteryFavoriteValue(getBatterySettings());
+      const favorite = {
+        id: makeId(),
+        name,
+        ...settings,
+        battery: batteryConfig
+      };
+
       favorites.push(favorite);
       activeFavoriteId = favorite.id;
       setFavoriteParameterStyle(true);
-      updateSelectedNameDisplay();
       saveFavoritesToStorage();
       renderFavorites();
-
       elements.forecastStatus.classList.remove("error");
       elements.forecastStatus.textContent = `Saved new favorite “${name}”.`;
     });
@@ -962,317 +1650,18 @@
       elements.forecastStatus.textContent = "Favorite selection cleared.";
     });
 
-    document.getElementById("forecastButton")
-      .addEventListener("click", fetchForecast);
+    document.getElementById("forecastButton").addEventListener("click", fetchForecast);
 
-    function buildHourlyProductionByDay(data, settings) {
-      const lossFactor = 1 - settings.lossPercent / 100;
-      const times = Array.isArray(data?.hourly?.time) ? data.hourly.time : [];
-      const irradiance = Array.isArray(data?.hourly?.global_tilted_irradiance) ? data.hourly.global_tilted_irradiance : [];
-      const byDate = new Map();
-
-      times.forEach((time, index) => {
-        const value = Number(irradiance[index]);
-        if (!Number.isFinite(value)) return;
-
-        const date = time.slice(0, 10);
-        const hourlyProduction = value * settings.peakPower * lossFactor / 1000;
-
-        if (!byDate.has(date)) {
-          byDate.set(date, []);
-        }
-
-        byDate.get(date).push({
-          time,
-          label: new Intl.DateTimeFormat(undefined, {
-            hour: "numeric"
-          }).format(new Date(time)),
-          production: hourlyProduction
-        });
-      });
-
-      return [...byDate.entries()].slice(0, 16).map(([date, entries]) => ({
-        date,
-        entries: entries.filter((entry, idx, arr) => (
-          idx === 0 || idx === arr.length - 1 || entry.production > 0.0001
-        ))
-      }));
+    function initializeDefaults() {
+      restoreTimeWindows([{ id: 1, start: "08:00", end: "18:00", value: 1.2 }]);
+      restoreHourlyProfile(buildDefaultHourlyProfile());
+      renderFavorites();
+      syncBatteryUi();
+      updateSelectedNameDisplay();
+      setSidebarOpen(true);
     }
 
-    function destroyHourlyCharts() {
-      hourlyCharts.forEach(chart => chart.destroy());
-      hourlyCharts = [];
-    }
-
-    function renderHourlyProductionCharts(daySeries) {
-      destroyHourlyCharts();
-      elements.hourlyChartsContainer.replaceChildren();
-
-      if (!daySeries || !daySeries.length) {
-        return;
-      }
-
-      daySeries.forEach(day => {
-        const card = document.createElement("div");
-        card.className = "hourly-day-card";
-
-        const title = document.createElement("h3");
-        title.textContent = formatDate(day.date);
-        card.appendChild(title);
-
-        const wrap = document.createElement("div");
-        wrap.className = "hourly-chart-wrap";
-
-        const canvas = document.createElement("canvas");
-        wrap.appendChild(canvas);
-        card.appendChild(wrap);
-        elements.hourlyChartsContainer.appendChild(card);
-
-        const labels = day.entries.map(entry => entry.label);
-        const values = day.entries.map(entry => Number(entry.production.toFixed(4)));
-        const barColors = day.entries.map(entry =>
-          entry.production > 0.0001 ? "rgba(240, 180, 41, 0.8)" : "rgba(157, 167, 179, 0.18)"
-        );
-
-        const chart = new Chart(canvas, {
-          type: "bar",
-          data: {
-            labels,
-            datasets: [{
-              label: "Production (kWh)",
-              data: values,
-              backgroundColor: barColors,
-              borderColor: "#f0b429",
-              borderWidth: 1,
-              borderRadius: 4
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { display: false }
-            },
-            scales: {
-              x: {
-                ticks: {
-                  color: "#9da7b3",
-                  autoSkip: true,
-                  maxRotation: 0,
-                  minRotation: 0
-                },
-                grid: { color: "rgba(157, 167, 179, 0.12)" }
-              },
-              y: {
-                beginAtZero: true,
-                ticks: { color: "#9da7b3" },
-                grid: { color: "rgba(157, 167, 179, 0.12)" },
-                title: {
-                  display: true,
-                  text: "kWh/h",
-                  color: "#9da7b3"
-                }
-              }
-            }
-          }
-        });
-
-        hourlyCharts.push(chart);
-      });
-    }
-
-    async function fetchForecast() {
-      const requestId = ++forecastRequestId;
-      const settings = getSettings();
-
-      elements.forecastStatus.classList.remove("error");
-
-      if (!settingsAreValid(settings)) {
-        elements.forecastStatus.classList.add("error");
-        elements.forecastStatus.textContent =
-          "Check the coordinates, tilt, azimuth, peak power, and system losses values.";
-        return;
-      }
-
-      elements.forecastStatus.textContent = "Loading forecast…";
-
-      const url = new URL("https://api.open-meteo.com/v1/forecast");
-      url.searchParams.set("latitude", settings.latitude);
-      url.searchParams.set("longitude", settings.longitude);
-      url.searchParams.set("hourly", "global_tilted_irradiance");
-      url.searchParams.set("tilt", settings.tilt);
-      url.searchParams.set("azimuth", settings.azimuth);
-      url.searchParams.set("forecast_days", "16");
-      url.searchParams.set("timezone", "auto");
-
-      try {
-        const response = await fetch(url);
-
-        if (!response.ok) {
-          throw new Error(`Forecast request failed (${response.status}).`);
-        }
-
-        const data = await response.json();
-        if (requestId !== forecastRequestId) return;
-
-        const times = data.hourly?.time;
-        const irradiance = data.hourly?.global_tilted_irradiance;
-
-        if (!Array.isArray(times) || !Array.isArray(irradiance)) {
-          throw new Error(
-            "The API response did not include hourly tilted irradiance."
-          );
-        }
-
-        const lossFactor = 1 - settings.lossPercent / 100;
-        const dailyTotals = new Map();
-
-        times.forEach((time, index) => {
-          const date = time.slice(0, 10);
-          const value = irradiance[index];
-
-          if (!dailyTotals.has(date)) dailyTotals.set(date, 0);
-
-          if (Number.isFinite(value)) {
-            dailyTotals.set(
-              date,
-              dailyTotals.get(date) + value * settings.peakPower * lossFactor / 1000
-            );
-          }
-        });
-
-        const rows = [...dailyTotals.entries()]
-          .slice(0, 16)
-          .map(([date, energy]) => ({ date, energy }));
-
-        let runningTotal = 0;
-        rows.forEach(row => {
-          runningTotal += row.energy;
-          row.cumulative = runningTotal;
-        });
-
-        renderForecast(rows);
-        renderHourlyProductionCharts(buildHourlyProductionByDay(data, settings));
-        elements.forecastStatus.textContent =
-          `Forecast loaded for ${rows.length} days.`;
-      } catch (error) {
-        if (requestId !== forecastRequestId) return;
-
-        elements.forecastStatus.classList.add("error");
-        elements.forecastStatus.textContent =
-          error.message || "Could not load the forecast.";
-      }
-    }
-
-    function formatDate(dateString) {
-      return new Intl.DateTimeFormat(undefined, {
-        weekday: "short",
-        month: "short",
-        day: "numeric"
-      }).format(new Date(dateString + "T12:00:00"));
-    }
-
-    function renderForecast(rows) {
-      elements.forecastContent.hidden = true;
-      elements.forecastResults.hidden = false;
-      elements.forecastTable.replaceChildren();
-
-      const labels = rows.map(row => formatDate(row.date));
-      const dailyValues = rows.map(row => Number(row.energy.toFixed(3)));
-      const cumulativeValues = rows.map(row => Number(row.cumulative.toFixed(3)));
-
-      const total = rows.length ? rows[rows.length - 1].cumulative : 0;
-      const average = rows.length ? total / rows.length : 0;
-
-      elements.periodSummary.textContent = rows.length
-        ? `${formatDate(rows[0].date)} – ${formatDate(rows[rows.length - 1].date)}`
-        : "—";
-      elements.totalSummary.textContent = `${total.toFixed(2)} kWh`;
-      elements.averageSummary.textContent = `${average.toFixed(2)} kWh`;
-
-      rows.forEach(row => {
-        const tr = document.createElement("tr");
-        const dateCell = document.createElement("td");
-        const dailyCell = document.createElement("td");
-        const cumulativeCell = document.createElement("td");
-
-        dateCell.textContent = formatDate(row.date);
-        dailyCell.textContent = row.energy.toFixed(2);
-        cumulativeCell.textContent = row.cumulative.toFixed(2);
-
-        tr.append(dateCell, dailyCell, cumulativeCell);
-        elements.forecastTable.appendChild(tr);
-      });
-
-      const chartOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { labels: { color: "#e6edf3" } }
-        },
-        scales: {
-          x: {
-            ticks: {
-              color: "#9da7b3",
-              autoSkip: false,
-              maxTicksLimit: 16,
-              maxRotation: 45,
-              minRotation: 0
-            },
-            grid: { color: "rgba(157, 167, 179, 0.12)" }
-          },
-          y: {
-            beginAtZero: true,
-            ticks: { color: "#9da7b3" },
-            grid: { color: "rgba(157, 167, 179, 0.12)" },
-            title: {
-              display: true,
-              text: "Energy (kWh)",
-              color: "#9da7b3"
-            }
-          }
-        }
-      };
-
-      if (dailyChart) dailyChart.destroy();
-      if (cumulativeChart) cumulativeChart.destroy();
-
-      dailyChart = new Chart(document.getElementById("dailyChart"), {
-        type: "bar",
-        data: {
-          labels,
-          datasets: [{
-            label: "Daily energy (kWh)",
-            data: dailyValues,
-            backgroundColor: "rgba(240, 180, 41, 0.78)",
-            borderColor: "#f0b429",
-            borderWidth: 1,
-            borderRadius: 4
-          }]
-        },
-        options: chartOptions
-      });
-
-      cumulativeChart = new Chart(document.getElementById("cumulativeChart"), {
-        type: "line",
-        data: {
-          labels,
-          datasets: [{
-            label: "Cumulative energy (kWh)",
-            data: cumulativeValues,
-            borderColor: "#58a6ff",
-            backgroundColor: "rgba(88, 166, 255, 0.16)",
-            fill: true,
-            tension: 0.25,
-            pointRadius: 3
-          }]
-        },
-        options: chartOptions
-      });
-    }
-
-    renderFavorites();
-    updateSelectedNameDisplay();
+    initializeDefaults();
   </script>
 </body>
 </html>
