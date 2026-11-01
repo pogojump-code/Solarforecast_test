@@ -56,7 +56,9 @@
     .menu-button,
     .primary-button,
     .secondary-button,
-    .favorite-button {
+    .favorite-button,
+    .favorite-action-button,
+    .favorite-delete-button {
       border: 1px solid var(--border);
       border-radius: 8px;
       color: var(--text);
@@ -66,7 +68,9 @@
     .menu-button { padding: 7px 11px; }
     .menu-button:hover,
     .secondary-button:hover,
-    .favorite-button:hover { background: #293442; }
+    .favorite-button:hover,
+    .favorite-action-button:hover,
+    .favorite-delete-button:hover { background: #293442; }
 
     .app-title {
       margin: 0;
@@ -118,7 +122,11 @@
       margin-top: 12px;
     }
 
-    .favorite-row { display: flex; gap: 6px; }
+    .favorite-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
 
     .favorite-button {
       flex: 1;
@@ -130,15 +138,18 @@
       white-space: nowrap;
     }
 
-    .delete-button {
-      width: 38px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
+    .favorite-action-button,
+    .favorite-delete-button {
+      padding: 8px 9px;
+      min-width: 40px;
+    }
+
+    .favorite-delete-button {
       color: var(--danger);
       background: transparent;
     }
 
-    .delete-button:hover { background: #352126; }
+    .favorite-delete-button:hover { background: #352126; }
 
     main {
       width: min(1100px, 100%);
@@ -432,7 +443,7 @@
           Get 16-day forecast
         </button>
         <button id="saveFavoriteButton" class="secondary-button" type="button">
-          Save as favorite
+          Save as new favorite
         </button>
         <button id="clearSelectionButton" class="secondary-button" type="button">
           Clear favorite selection
@@ -655,15 +666,29 @@
         loadButton.title = favorite.name;
         loadButton.addEventListener("click", () => selectFavorite(favorite));
 
+        const modifyButton = document.createElement("button");
+        modifyButton.type = "button";
+        modifyButton.className = "favorite-action-button";
+        modifyButton.textContent = "Modify";
+        modifyButton.title = "Modify " + favorite.name;
+        modifyButton.setAttribute("aria-label", "Modify " + favorite.name);
+        modifyButton.addEventListener("click", event => {
+          event.stopPropagation();
+          loadFavoriteForEditing(favorite);
+        });
+
         const deleteButton = document.createElement("button");
         deleteButton.type = "button";
-        deleteButton.className = "delete-button";
-        deleteButton.textContent = "×";
+        deleteButton.className = "favorite-delete-button";
+        deleteButton.textContent = "Delete";
         deleteButton.title = "Delete " + favorite.name;
         deleteButton.setAttribute("aria-label", "Delete " + favorite.name);
 
         deleteButton.addEventListener("click", event => {
           event.stopPropagation();
+          const confirmed = window.confirm(`Delete favorite “${favorite.name}”?`);
+          if (!confirmed) return;
+
           favorites = favorites.filter(item => item.id !== favorite.id);
 
           if (activeFavoriteId === favorite.id) {
@@ -674,12 +699,12 @@
           renderFavorites();
         });
 
-        row.append(loadButton, deleteButton);
+        row.append(loadButton, modifyButton, deleteButton);
         elements.favoriteList.appendChild(row);
       });
     }
 
-    async function selectFavorite(favorite) {
+    function loadFavoriteForEditing(favorite) {
       activeFavoriteId = favorite.id;
       elements.name.value = favorite.name;
       elements.latitude.value = favorite.latitude;
@@ -702,6 +727,10 @@
       }
 
       setSidebarOpen(false);
+    }
+
+    async function selectFavorite(favorite) {
+      loadFavoriteForEditing(favorite);
       const forecastPromise = fetchForecast();
 
       requestAnimationFrame(() => {
@@ -914,17 +943,8 @@
         return;
       }
 
-      let favorite = activeFavoriteId
-        ? favorites.find(item => item.id === activeFavoriteId)
-        : null;
-
-      if (favorite) {
-        Object.assign(favorite, { name, ...settings });
-      } else {
-        favorite = { id: makeId(), name, ...settings };
-        favorites.push(favorite);
-      }
-
+      const favorite = { id: makeId(), name, ...settings };
+      favorites.push(favorite);
       activeFavoriteId = favorite.id;
       setFavoriteParameterStyle(true);
       updateSelectedNameDisplay();
@@ -932,7 +952,7 @@
       renderFavorites();
 
       elements.forecastStatus.classList.remove("error");
-      elements.forecastStatus.textContent = `Saved “${name}”.`;
+      elements.forecastStatus.textContent = `Saved new favorite “${name}”.`;
     });
 
     document.getElementById("clearSelectionButton").addEventListener("click", () => {
@@ -973,7 +993,9 @@
 
       return [...byDate.entries()].slice(0, 16).map(([date, entries]) => ({
         date,
-        entries
+        entries: entries.filter((entry, idx, arr) => (
+          idx === 0 || idx === arr.length - 1 || entry.production > 0.0001
+        ))
       }));
     }
 
@@ -1008,20 +1030,21 @@
 
         const labels = day.entries.map(entry => entry.label);
         const values = day.entries.map(entry => Number(entry.production.toFixed(4)));
+        const barColors = day.entries.map(entry =>
+          entry.production > 0.0001 ? "rgba(240, 180, 41, 0.8)" : "rgba(157, 167, 179, 0.18)"
+        );
 
         const chart = new Chart(canvas, {
-          type: "line",
+          type: "bar",
           data: {
             labels,
             datasets: [{
               label: "Production (kWh)",
               data: values,
+              backgroundColor: barColors,
               borderColor: "#f0b429",
-              backgroundColor: "rgba(240, 180, 41, 0.18)",
-              fill: true,
-              tension: 0.25,
-              pointRadius: 2,
-              borderWidth: 2
+              borderWidth: 1,
+              borderRadius: 4
             }]
           },
           options: {
