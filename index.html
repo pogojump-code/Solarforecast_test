@@ -280,6 +280,34 @@
       font-size: 1rem;
     }
 
+    .summary-chart-section {
+      margin-top: 18px;
+    }
+
+    .hourly-charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 12px;
+    }
+
+    .hourly-day-card {
+      padding: 12px;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    .hourly-day-card h3 {
+      margin: 0 0 10px;
+      font-size: 0.95rem;
+    }
+
+    .hourly-chart-wrap {
+      position: relative;
+      height: 220px;
+    }
+
     .table-wrap { overflow-x: auto; }
 
     table {
@@ -462,6 +490,11 @@
             <tbody id="forecastTable"></tbody>
           </table>
         </div>
+
+        <div class="summary-chart-section">
+          <h3>Hourly production by day</h3>
+          <div id="hourlyChartsContainer" class="hourly-charts-grid"></div>
+        </div>
       </div>
     </section>
   </main>
@@ -495,7 +528,8 @@
       forecastTable: document.getElementById("forecastTable"),
       periodSummary: document.getElementById("periodSummary"),
       totalSummary: document.getElementById("totalSummary"),
-      averageSummary: document.getElementById("averageSummary")
+      averageSummary: document.getElementById("averageSummary"),
+      hourlyChartsContainer: document.getElementById("hourlyChartsContainer")
     };
 
     let favorites = loadFavorites();
@@ -504,6 +538,7 @@
     let cumulativeChart = null;
     let marker = null;
     let locationAccuracyCircle = null;
+    let hourlyCharts = [];
     let forecastRequestId = 0;
 
     const map = L.map("map").setView([40.7128, -74.0060], 5);
@@ -910,6 +945,119 @@
     document.getElementById("forecastButton")
       .addEventListener("click", fetchForecast);
 
+    function buildHourlyProductionByDay(data, settings) {
+      const lossFactor = 1 - settings.lossPercent / 100;
+      const times = Array.isArray(data?.hourly?.time) ? data.hourly.time : [];
+      const irradiance = Array.isArray(data?.hourly?.global_tilted_irradiance) ? data.hourly.global_tilted_irradiance : [];
+      const byDate = new Map();
+
+      times.forEach((time, index) => {
+        const value = Number(irradiance[index]);
+        if (!Number.isFinite(value)) return;
+
+        const date = time.slice(0, 10);
+        const hourlyProduction = value * settings.peakPower * lossFactor / 1000;
+
+        if (!byDate.has(date)) {
+          byDate.set(date, []);
+        }
+
+        byDate.get(date).push({
+          time,
+          label: new Intl.DateTimeFormat(undefined, {
+            hour: "numeric"
+          }).format(new Date(time)),
+          production: hourlyProduction
+        });
+      });
+
+      return [...byDate.entries()].slice(0, 16).map(([date, entries]) => ({
+        date,
+        entries
+      }));
+    }
+
+    function destroyHourlyCharts() {
+      hourlyCharts.forEach(chart => chart.destroy());
+      hourlyCharts = [];
+    }
+
+    function renderHourlyProductionCharts(daySeries) {
+      destroyHourlyCharts();
+      elements.hourlyChartsContainer.replaceChildren();
+
+      if (!daySeries || !daySeries.length) {
+        return;
+      }
+
+      daySeries.forEach(day => {
+        const card = document.createElement("div");
+        card.className = "hourly-day-card";
+
+        const title = document.createElement("h3");
+        title.textContent = formatDate(day.date);
+        card.appendChild(title);
+
+        const wrap = document.createElement("div");
+        wrap.className = "hourly-chart-wrap";
+
+        const canvas = document.createElement("canvas");
+        wrap.appendChild(canvas);
+        card.appendChild(wrap);
+        elements.hourlyChartsContainer.appendChild(card);
+
+        const labels = day.entries.map(entry => entry.label);
+        const values = day.entries.map(entry => Number(entry.production.toFixed(4)));
+
+        const chart = new Chart(canvas, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [{
+              label: "Production (kWh)",
+              data: values,
+              borderColor: "#f0b429",
+              backgroundColor: "rgba(240, 180, 41, 0.18)",
+              fill: true,
+              tension: 0.25,
+              pointRadius: 2,
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false }
+            },
+            scales: {
+              x: {
+                ticks: {
+                  color: "#9da7b3",
+                  autoSkip: true,
+                  maxRotation: 0,
+                  minRotation: 0
+                },
+                grid: { color: "rgba(157, 167, 179, 0.12)" }
+              },
+              y: {
+                beginAtZero: true,
+                ticks: { color: "#9da7b3" },
+                grid: { color: "rgba(157, 167, 179, 0.12)" },
+                title: {
+                  display: true,
+                  text: "kWh/h",
+                  color: "#9da7b3"
+                }
+              }
+            }
+          }
+        });
+
+        hourlyCharts.push(chart);
+      });
+    }
+
     async function fetchForecast() {
       const requestId = ++forecastRequestId;
       const settings = getSettings();
@@ -981,6 +1129,7 @@
         });
 
         renderForecast(rows);
+        renderHourlyProductionCharts(buildHourlyProductionByDay(data, settings));
         elements.forecastStatus.textContent =
           `Forecast loaded for ${rows.length} days.`;
       } catch (error) {
