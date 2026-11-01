@@ -327,15 +327,43 @@
       margin-top: 8px;
     }
 
-    .time-window-row {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(120px, 1fr));
+    .time-window-inline {
+      display: flex;
       gap: 8px;
-      margin-top: 8px;
+      align-items: center;
+      flex-wrap: wrap;
     }
 
-    .time-window-row .field {
+    .time-window-inline .field {
+      min-width: 110px;
       gap: 4px;
+      flex: 1;
+    }
+
+    .time-window-inline .range-separator {
+      color: var(--muted);
+      opacity: 0.8;
+    }
+
+    .per-hour-wrap {
+      display: grid;
+      gap: 6px;
+      margin-top: 8px;
+      max-height: 280px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .per-hour-row {
+      display: grid;
+      grid-template-columns: 70px 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .per-hour-row label {
+      color: var(--muted);
+      font-size: 0.8rem;
     }
 
     .table-wrap { overflow-x: auto; }
@@ -371,7 +399,7 @@
       .app-title { font-size: 0.95rem; }
       .selected-name { max-width: 38vw; font-size: 0.87rem; }
       .summary { grid-template-columns: 1fr; }
-      .time-window-row { grid-template-columns: 1fr; }
+      .time-window-inline { flex-direction: column; align-items: stretch; }
       #map { height: 290px; }
       .chart-wrap { height: 270px; }
       .favorite-button { font-size: 0.72rem; }
@@ -447,7 +475,7 @@
         </div>
 
         <div class="combined-settings">
-          <div class="batch-card">
+          <div id="batteryPanel" class="batch-card">
             <div class="field">
               <label for="batteryCapacityInput">Battery capacity</label>
               <div class="input-with-unit">
@@ -497,7 +525,7 @@
             </div>
           </div>
 
-          <div class="batch-card">
+          <div id="loadPanel" class="batch-card">
             <label for="loadMode" style="display: block; margin-bottom: 8px;">Load</label>
             <div class="load-mode-row">
               <div class="input-with-unit">
@@ -511,18 +539,30 @@
               <select id="loadMode">
                 <option value="constant-day" selected>constant through day</option>
                 <option value="time-window">constant through time window</option>
+                <option value="per-hour">custom per hour</option>
               </select>
 
-              <div id="timeWindowWrap" class="time-window-row" hidden>
+              <div id="timeWindowWrap" class="time-window-inline" hidden>
                 <div class="field">
                   <label for="loadStartHour">Start</label>
-                  <select id="loadStartHour"></select>
+                  <div class="input-with-unit">
+                    <select id="loadStartHour"></select>
+                    <span style="color: var(--muted);">:</span>
+                    <select id="loadStartMinute"></select>
+                  </div>
                 </div>
+                <div class="range-separator">to</div>
                 <div class="field">
                   <label for="loadEndHour">End</label>
-                  <select id="loadEndHour"></select>
+                  <div class="input-with-unit">
+                    <select id="loadEndHour"></select>
+                    <span style="color: var(--muted);">:</span>
+                    <select id="loadEndMinute"></select>
+                  </div>
                 </div>
               </div>
+
+              <div id="perHourWrap" class="per-hour-wrap" hidden></div>
             </div>
           </div>
         </div>
@@ -621,18 +661,23 @@
       averageSummary: document.getElementById("averageSummary"),
       hourlyChartsContainer: document.getElementById("hourlyChartsContainer"),
       batteryModeEnabled: document.getElementById("batteryModeEnabled"),
+      batteryPanel: document.getElementById("batteryPanel"),
       batteryCapacityInput: document.getElementById("batteryCapacityInput"),
       batteryCapacityUnit: document.getElementById("batteryCapacityUnit"),
       batteryMinLevel: document.getElementById("batteryMinLevel"),
       batteryLevelInput: document.getElementById("batteryLevelInput"),
       batteryLevelUnit: document.getElementById("batteryLevelUnit"),
       batteryGraphUnit: document.getElementById("batteryGraphUnit"),
+      loadPanel: document.getElementById("loadPanel"),
       loadMode: document.getElementById("loadMode"),
       loadValue: document.getElementById("loadValue"),
       loadUnit: document.getElementById("loadUnit"),
       timeWindowWrap: document.getElementById("timeWindowWrap"),
+      perHourWrap: document.getElementById("perHourWrap"),
       loadStartHour: document.getElementById("loadStartHour"),
-      loadEndHour: document.getElementById("loadEndHour")
+      loadStartMinute: document.getElementById("loadStartMinute"),
+      loadEndHour: document.getElementById("loadEndHour"),
+      loadEndMinute: document.getElementById("loadEndMinute")
     };
 
     let favorites = loadFavorites();
@@ -642,7 +687,6 @@
     let marker = null;
     let locationAccuracyCircle = null;
     let hourlyCharts = [];
-    let forecastRequestId = 0;
 
     const map = L.map("map").setView([40.7128, -74.0060], 5);
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -730,13 +774,39 @@
         Number.isFinite(settings.lossPercent) && settings.lossPercent >= 0 && settings.lossPercent <= 100;
     }
 
-    function populateHourSelects() {
+    function populateHourMinuteSelects() {
       const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-      const options = hours.map((hour) => `<option value="${hour}">${hour}</option>`).join("");
-      elements.loadStartHour.innerHTML = options;
-      elements.loadEndHour.innerHTML = options;
+      const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+      const hourOptions = hours.map((hour) => `<option value="${hour}">${hour}</option>`).join("");
+      const minuteOptions = minutes.map((minute) => `<option value="${minute}">${minute}</option>`).join("");
+      elements.loadStartHour.innerHTML = hourOptions;
+      elements.loadEndHour.innerHTML = hourOptions;
+      elements.loadStartMinute.innerHTML = minuteOptions;
+      elements.loadEndMinute.innerHTML = minuteOptions;
       elements.loadStartHour.value = "08";
+      elements.loadStartMinute.value = "00";
       elements.loadEndHour.value = "18";
+      elements.loadEndMinute.value = "00";
+    }
+
+    function buildPerHourInputs() {
+      elements.perHourWrap.innerHTML = Array.from({ length: 24 }, (_, index) => {
+        const label = `${String(index).padStart(2, "0")}:00`;
+        return `
+          <div class="per-hour-row">
+            <label>${label}</label>
+            <input type="number" min="0" step="0.1" value="0" data-hour="${index}" aria-label="Load for ${label}">
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderPerHourInputsFromValues(values) {
+      const inputs = elements.perHourWrap.querySelectorAll("input[data-hour]");
+      inputs.forEach((input) => {
+        const hour = Number(input.dataset.hour);
+        input.value = values[hour] ?? 0;
+      });
     }
 
     function getLoadSettings() {
@@ -752,24 +822,37 @@
         loadValue: Number(elements.loadValue.value),
         loadUnit: elements.loadUnit.value,
         loadStartHour: elements.loadStartHour.value,
-        loadEndHour: elements.loadEndHour.value
+        loadStartMinute: elements.loadStartMinute.value,
+        loadEndHour: elements.loadEndHour.value,
+        loadEndMinute: elements.loadEndMinute.value,
+        perHourValues: getPerHourValues()
       };
+    }
+
+    function getPerHourValues() {
+      const values = Array.from({ length: 24 }, () => 0);
+      const rows = elements.perHourWrap.querySelectorAll("input[data-hour]");
+      rows.forEach((input) => {
+        const hour = Number(input.dataset.hour);
+        values[hour] = Number(input.value || 0);
+      });
+      return values;
     }
 
     function showLoadSettings() {
       const enabled = elements.batteryModeEnabled.checked;
-      elements.batteryCapacityInput.disabled = !enabled;
-      elements.batteryCapacityUnit.disabled = !enabled;
-      elements.batteryMinLevel.disabled = !enabled;
-      elements.batteryLevelInput.disabled = !enabled;
-      elements.batteryLevelUnit.disabled = !enabled;
-      elements.batteryGraphUnit.disabled = !enabled;
-      elements.loadValue.disabled = !enabled;
-      elements.loadUnit.disabled = !enabled;
-      elements.loadMode.disabled = !enabled;
-      elements.loadStartHour.disabled = !enabled;
-      elements.loadEndHour.disabled = !enabled;
-      elements.timeWindowWrap.hidden = elements.loadMode.value !== "time-window";
+      elements.batteryPanel.style.display = enabled ? "block" : "none";
+      elements.loadPanel.style.display = enabled ? "block" : "none";
+
+      if (!enabled) {
+        elements.timeWindowWrap.hidden = true;
+        elements.perHourWrap.hidden = true;
+        return;
+      }
+
+      const mode = elements.loadMode.value;
+      elements.timeWindowWrap.hidden = mode !== "time-window";
+      elements.perHourWrap.hidden = mode !== "per-hour";
     }
 
     elements.batteryModeEnabled.addEventListener("change", showLoadSettings);
@@ -815,23 +898,31 @@
       };
     }
 
-    function minutesFromHourString(value) {
-      const hour = Number(String(value || "00").slice(0, 2));
-      return Number.isFinite(hour) ? hour * 60 : 0;
+    function toMinutes(hour, minute) {
+      return Number(hour) * 60 + Number(minute || 0);
     }
 
-    function getLoadProfileForHour(dateIso, batterySettings) {
+    function getLoadDemandForHour(dateIso, batterySettings) {
+      if (!batterySettings.batteryMode) return 0;
+
       const date = new Date(dateIso);
-      const currentMinute = date.getHours() * 60 + date.getMinutes();
+      const hour = String(date.getHours()).padStart(2, "0");
+      const minute = String(date.getMinutes()).padStart(2, "0");
+      const currentMinuteIndex = toMinutes(hour, minute);
       const value = Number(batterySettings.loadValue || 0);
       const unit = batterySettings.loadUnit || "w";
       const baseKwh = wattToKwh(value, unit);
 
       if (batterySettings.loadMode === "time-window") {
-        const start = minutesFromHourString(batterySettings.loadStartHour || "08");
-        const end = minutesFromHourString(batterySettings.loadEndHour || "18");
-        const active = start < end ? currentMinute >= start && currentMinute < end : currentMinute >= start || currentMinute < end;
+        const start = toMinutes(batterySettings.loadStartHour || "08", batterySettings.loadStartMinute || "00");
+        const end = toMinutes(batterySettings.loadEndHour || "18", batterySettings.loadEndMinute || "00");
+        const active = start < end ? currentMinuteIndex >= start && currentMinuteIndex < end : currentMinuteIndex >= start || currentMinuteIndex < end;
         return active ? baseKwh : 0;
+      }
+
+      if (batterySettings.loadMode === "per-hour") {
+        const hourIndex = Number(hour);
+        return Number((batterySettings.perHourValues?.[hourIndex] || 0)) || 0;
       }
 
       return baseKwh;
@@ -906,8 +997,10 @@
       elements.loadValue.value = battery.loadValue ?? 1500;
       elements.loadUnit.value = battery.loadUnit || "w";
       elements.loadStartHour.value = battery.loadStartHour || "08";
+      elements.loadStartMinute.value = battery.loadStartMinute || "00";
       elements.loadEndHour.value = battery.loadEndHour || "18";
-
+      elements.loadEndMinute.value = battery.loadEndMinute || "00";
+      if (Array.isArray(battery.perHourValues)) renderPerHourInputsFromValues(battery.perHourValues);
       showLoadSettings();
       setLocationAccuracyText("");
       clearLocationAccuracyCircle();
@@ -922,11 +1015,10 @@
 
     async function selectFavorite(favorite) {
       loadFavoriteForEditing(favorite);
-      const forecastPromise = fetchForecast();
       requestAnimationFrame(() => {
         document.getElementById("forecast").scrollIntoView({ behavior: "smooth", block: "start" });
       });
-      await forecastPromise;
+      await fetchForecast();
     }
 
     function setMapLocation(latitude, longitude, zoom = 9, accuracyMeters = null) {
@@ -1005,7 +1097,7 @@
 
     function buildDemoForecast() {
       const labels = [];
-      const production = [];
+      const produced = [];
       const battery = [];
       const load = [];
       const lost = [];
@@ -1013,37 +1105,81 @@
       const batteryPct = [];
       const startDate = new Date();
 
+      const batteryState = buildBatteryStateValues({
+        batteryCapacity: Number(elements.batteryCapacityInput.value || 0),
+        batteryCapacityUnit: elements.batteryCapacityUnit.value,
+        batteryLevelValue: Number(elements.batteryLevelInput.value || 0),
+        batteryLevelUnit: elements.batteryLevelUnit.value,
+        batteryMinLevel: Number(elements.batteryMinLevel.value || 20)
+      });
+
       for (let i = 0; i < 16; i++) {
         const date = new Date(startDate);
         date.setDate(startDate.getDate() + i);
         labels.push(date.toISOString().slice(0, 10));
 
-        const dayFactor = 0.78 + ((i % 5) * 0.08);
-        const total = Math.max(0, (3.2 + Math.sin((i + 1) / 3) * 1.1) * dayFactor);
-        const loadValue = elements.batteryModeEnabled.checked ? Number(elements.loadValue.value || 0) : 0;
-        const batteryShare = total * 0.38;
-        const loadShare = Math.min(total - batteryShare, Math.max(0, (loadValue / 1000) * 0.7));
-        const lostShare = Math.max(0, total - batteryShare - loadShare);
+        let dayProduced = 0;
+        const hourProduced = [];
+        const hourBattery = [];
+        const hourLoad = [];
+        const hourLost = [];
 
-        production.push(Number(total.toFixed(2)));
-        battery.push(Number(batteryShare.toFixed(2)));
-        load.push(Number(loadShare.toFixed(2)));
-        lost.push(Number(lostShare.toFixed(2)));
+        for (let h = 0; h < 24; h++) {
+          const hourFraction = 1 - Math.abs(h - 12) / 12;
+          const raw = Math.max(0, (0.7 + hourFraction * 1.7) * (0.7 + (i % 5) * 0.1));
+          const energy = raw * 0.7;
+          hourProduced.push(energy);
+          dayProduced += energy;
+        }
 
-        if (i === 0) cumulative.push(total);
-        else cumulative.push(Number((cumulative[i - 1] + total).toFixed(2)));
+        const loadSettings = getLoadSettings();
+        const batteryEnabled = elements.batteryModeEnabled.checked;
 
-        const state = buildBatteryStateValues({
-          batteryCapacity: Number(elements.batteryCapacityInput.value || 0),
-          batteryCapacityUnit: elements.batteryCapacityUnit.value,
-          batteryLevelValue: Number(elements.batteryLevelInput.value || 0),
-          batteryLevelUnit: elements.batteryLevelUnit.value,
-          batteryMinLevel: Number(elements.batteryMinLevel.value || 20)
-        });
-        batteryPct.push(Number(state.currentLevelPercent.toFixed(1)));
+        if (batteryEnabled) {
+          let remaining = dayProduced;
+          let batteryAlloc = 0;
+          let loadAlloc = 0;
+          let lostAlloc = 0;
+
+          for (let h = 0; h < 24; h++) {
+            const production = hourProduced[h];
+            const demand = getLoadDemandForHour(new Date(date.getFullYear(), date.getMonth(), date.getDate(), h, 0).toISOString(), loadSettings);
+            const batteryCap = batteryState.capacityKwh;
+            const relevantBatterySpace = Math.max(0, batteryCap - batteryState.currentLevelKwh);
+            const toBattery = Math.min(production, relevantBatterySpace, production * 0.6 + demand * 0.1);
+            const afterBattery = Math.max(0, production - toBattery);
+            const toLoad = Math.min(afterBattery, demand);
+            const toLost = Math.max(0, afterBattery - toLoad);
+
+            hourBattery.push(toBattery);
+            hourLoad.push(toLoad);
+            hourLost.push(toLost);
+            batteryAlloc += toBattery;
+            loadAlloc += toLoad;
+            lostAlloc += toLost;
+            remaining = Math.max(0, remaining - production);
+          }
+
+          battery.push(Number(batteryAlloc.toFixed(2)));
+          load.push(Number(loadAlloc.toFixed(2)));
+          lost.push(Number(lostAlloc.toFixed(2)));
+        } else {
+          battery.push(0);
+          load.push(0);
+          lost.push(0);
+        }
+
+        produced.push(Number(dayProduced.toFixed(2)));
+        if (i === 0) cumulative.push(dayProduced);
+        else cumulative.push(Number((cumulative[i - 1] + dayProduced).toFixed(2)));
+
+        if (batteryEnabled) {
+          const pct = Math.min(100, Math.max(0, batteryState.currentLevelPercent));
+          batteryPct.push(Number(pct.toFixed(1)));
+        }
       }
 
-      return { labels, production, battery, load, lost, cumulative, batteryPct };
+      return { labels, produced, battery, load, lost, cumulative, batteryPct };
     }
 
     function destroyCharts() {
@@ -1062,48 +1198,57 @@
 
     function initDailyChart(data) {
       const ctx = document.getElementById("dailyChart").getContext("2d");
+      const batteryEnabled = elements.batteryModeEnabled.checked;
+      const datasets = batteryEnabled ? [
+        {
+          label: "Battery",
+          data: data.battery,
+          backgroundColor: "rgba(110, 231, 183, 0.82)",
+          borderColor: "rgba(110, 231, 183, 1)",
+          borderWidth: 1,
+          stack: "production"
+        },
+        {
+          label: "Load",
+          data: data.load,
+          backgroundColor: "rgba(245, 166, 35, 0.82)",
+          borderColor: "rgba(245, 166, 35, 1)",
+          borderWidth: 1,
+          stack: "production"
+        },
+        {
+          label: "Lost",
+          data: data.lost,
+          backgroundColor: "rgba(255, 123, 114, 0.82)",
+          borderColor: "rgba(255, 123, 114, 1)",
+          borderWidth: 1,
+          stack: "production"
+        },
+        {
+          label: "Battery %",
+          data: data.batteryPct,
+          type: "line",
+          borderColor: "rgba(121, 212, 255, 1)",
+          backgroundColor: "rgba(121, 212, 255, 0.25)",
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: false,
+          yAxisID: "y2",
+          tension: 0.2
+        }
+      ] : [{
+        label: "Production",
+        data: data.produced,
+        backgroundColor: "rgba(121, 212, 255, 0.76)",
+        borderColor: "rgba(121, 212, 255, 1)",
+        borderWidth: 1
+      }];
+
       dailyChart = new Chart(ctx, {
         type: "bar",
         data: {
           labels: data.labels,
-          datasets: [
-            {
-              label: "Battery",
-              data: data.battery,
-              backgroundColor: "rgba(110, 231, 183, 0.82)",
-              borderColor: "rgba(110, 231, 183, 1)",
-              borderWidth: 1,
-              stack: "production"
-            },
-            {
-              label: "Load",
-              data: data.load,
-              backgroundColor: "rgba(245, 166, 35, 0.82)",
-              borderColor: "rgba(245, 166, 35, 1)",
-              borderWidth: 1,
-              stack: "production"
-            },
-            {
-              label: "Lost",
-              data: data.lost,
-              backgroundColor: "rgba(255, 123, 114, 0.82)",
-              borderColor: "rgba(255, 123, 114, 1)",
-              borderWidth: 1,
-              stack: "production"
-            },
-            {
-              label: "Battery %",
-              data: data.batteryPct,
-              type: "line",
-              borderColor: "rgba(121, 212, 255, 1)",
-              backgroundColor: "rgba(121, 212, 255, 0.25)",
-              borderWidth: 2,
-              pointRadius: 0,
-              fill: false,
-              yAxisID: "y2",
-              tension: 0.2
-            }
-          ]
+          datasets
         },
         options: {
           responsive: true,
@@ -1111,22 +1256,22 @@
           interaction: { mode: "index", intersect: false },
           scales: {
             x: {
-              stacked: true,
+              stacked: batteryEnabled,
               grid: { color: "rgba(255,255,255,0.06)" }
             },
             y: {
-              stacked: true,
+              stacked: batteryEnabled,
               beginAtZero: true,
               title: { display: true, text: "kWh" },
               grid: { color: "rgba(255,255,255,0.06)" }
             },
-            y2: {
+            y2: batteryEnabled ? {
               position: "right",
               min: 0,
               max: 100,
               title: { display: true, text: "%" },
               grid: { drawOnChartArea: false }
-            }
+            } : undefined
           },
           plugins: {
             legend: { position: "bottom" },
@@ -1173,7 +1318,7 @@
       elements.forecastTable.innerHTML = data.labels.map((label, index) => `
         <tr>
           <td>${label}</td>
-          <td>${Number(data.production[index]).toFixed(2)}</td>
+          <td>${Number(data.produced[index]).toFixed(2)}</td>
           <td>${Number(data.cumulative[index]).toFixed(2)}</td>
         </tr>
       `).join("");
@@ -1184,6 +1329,7 @@
       hourlyCharts.forEach((chart) => chart.destroy());
       hourlyCharts = [];
 
+      const batteryEnabled = elements.batteryModeEnabled.checked;
       data.labels.forEach((label, index) => {
         const card = document.createElement("div");
         card.className = "hourly-day-card";
@@ -1191,27 +1337,32 @@
         elements.hourlyChartsContainer.appendChild(card);
 
         const ctx = card.querySelector("canvas").getContext("2d");
-        const productionValues = [
-          data.battery[index] * 0.4,
-          data.load[index] * 0.5,
-          data.lost[index] * 0.1
-        ];
+
+        const chartData = batteryEnabled ? {
+          labels: ["Battery", "Load", "Lost"],
+          datasets: [{
+            data: [data.battery[index], data.load[index], data.lost[index]],
+            backgroundColor: ["#6ee7b7", "#f5a623", "#ff7b72"],
+            borderRadius: 4
+          }]
+        } : {
+          labels: ["Produced"],
+          datasets: [{
+            data: [data.produced[index]],
+            backgroundColor: ["#79d4ff"],
+            borderRadius: 4
+          }]
+        };
 
         const chart = new Chart(ctx, {
           type: "bar",
-          data: {
-            labels: ["Battery", "Load", "Lost"],
-            datasets: [{
-              data: productionValues,
-              backgroundColor: ["#6ee7b7", "#f5a623", "#ff7b72"]
-            }]
-          },
+          data: chartData,
           options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-              y: { beginAtZero: true, grid: { color: "rgba(255,255,255,0.06)" } },
+              y: { beginAtZero: true, title: { display: true, text: "kWh" }, grid: { color: "rgba(255,255,255,0.06)" } },
               x: { grid: { display: false } }
             }
           }
@@ -1222,8 +1373,8 @@
 
     function renderForecast() {
       const forecast = buildDemoForecast();
-      const totalEnergy = forecast.production.reduce((sum, value) => sum + value, 0);
-      const averageEnergy = forecast.production.length ? totalEnergy / forecast.production.length : 0;
+      const totalEnergy = forecast.produced.reduce((sum, value) => sum + value, 0);
+      const averageEnergy = forecast.produced.length ? totalEnergy / forecast.produced.length : 0;
 
       elements.periodSummary.textContent = `${forecast.labels[0]} → ${forecast.labels[forecast.labels.length - 1]}`;
       elements.totalSummary.textContent = `${totalEnergy.toFixed(2)} kWh`;
@@ -1288,7 +1439,10 @@
           loadValue: battery.loadValue,
           loadUnit: battery.loadUnit,
           loadStartHour: battery.loadStartHour,
-          loadEndHour: battery.loadEndHour
+          loadStartMinute: battery.loadStartMinute,
+          loadEndHour: battery.loadEndHour,
+          loadEndMinute: battery.loadEndMinute,
+          perHourValues: battery.perHourValues
         }
       };
 
@@ -1365,7 +1519,8 @@
     }
 
     function init() {
-      populateHourSelects();
+      populateHourMinuteSelects();
+      buildPerHourInputs();
       renderFavorites();
       bindEvents();
       showLoadSettings();
