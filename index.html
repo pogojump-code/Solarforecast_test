@@ -2,12 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Solar Forecast</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     :root {
-      color-scheme: dark;
       --bg: #0d1117;
       --panel: #161b22;
       --panel-2: #1d2632;
@@ -17,25 +16,34 @@
       --accent: #f0b429;
       --accent-hover: #ffc94d;
       --danger: #ff7b72;
+      --battery: #8ae3b6;
+      --load: #7ab8ff;
+      --lost: #ff8a80;
+      --shadow: rgba(0,0,0,0.25);
     }
 
     * { box-sizing: border-box; }
-    html, body { margin: 0; min-height: 100%; }
-    body {
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
       background: var(--bg);
       color: var(--text);
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
       overflow: hidden;
     }
 
-    button, input, select {
-      font: inherit;
+    body.sidebar-open .leaflet-control-zoom {
+      display: block;
+    }
+    body:not(.sidebar-open) .leaflet-control-zoom {
+      display: block;
     }
 
     .topbar {
       position: sticky;
       top: 0;
-      z-index: 1100;
+      z-index: 1200;
       display: flex;
       align-items: center;
       gap: 12px;
@@ -48,6 +56,15 @@
 
     .menu-button,
     .primary-button,
+    .secondary-button,
+    input,
+    select,
+    button {
+      font: inherit;
+    }
+
+    .menu-button,
+    .primary-button,
     .secondary-button {
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -56,19 +73,28 @@
       cursor: pointer;
     }
 
-    .menu-button { padding: 7px 11px; }
-    .primary-button, .secondary-button { padding: 9px 13px; }
+    .menu-button {
+      padding: 7px 11px;
+    }
+
+    .primary-button,
+    .secondary-button {
+      padding: 9px 13px;
+    }
+
     .primary-button {
-      color: #1a1a1a;
       background: var(--accent);
       border-color: var(--accent);
+      color: #111;
       font-weight: 700;
     }
+
     .primary-button:hover { background: var(--accent-hover); }
 
     .title {
       margin: 0;
       font-size: 1.05rem;
+      font-weight: 700;
     }
 
     .sidebar {
@@ -76,35 +102,30 @@
       top: 58px;
       left: 0;
       bottom: 0;
-      z-index: 1050;
       width: 290px;
+      z-index: 1050;
       padding: 16px;
       background: var(--panel);
       border-right: 1px solid var(--border);
       overflow-y: auto;
       transform: translateX(0);
       transition: transform 180ms ease;
+      box-shadow: 8px 0 20px rgba(0,0,0,0.15);
     }
-    .sidebar.collapsed { transform: translateX(-100%); }
+
+    .sidebar.collapsed {
+      transform: translateX(-100%);
+    }
 
     .field {
       display: grid;
       gap: 6px;
-      margin-top: 10px;
+      margin-top: 12px;
     }
 
     .field label {
       color: var(--muted);
       font-size: 0.82rem;
-    }
-
-    input, select {
-      width: 100%;
-      padding: 9px 10px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      background: #0d1117;
     }
 
     .inline-row {
@@ -113,33 +134,52 @@
       align-items: center;
       flex-wrap: wrap;
     }
-    .inline-row .field { flex: 1; min-width: 110px; }
+
+    .inline-row .field {
+      margin-top: 0;
+      flex: 1;
+      min-width: 110px;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #0d1117;
+      color: var(--text);
+    }
 
     .time-window-inline {
       display: flex;
-      gap: 8px;
+      gap: 10px;
       flex-wrap: wrap;
-      align-items: center;
-      margin-top: 10px;
+      margin-top: 12px;
     }
+
     .time-window-inline .field {
-      min-width: 100px;
       flex: 1;
+      min-width: 110px;
     }
 
     .per-hour-grid {
       display: grid;
-      gap: 6px;
-      margin-top: 10px;
-      max-height: 250px;
+      gap: 8px;
+      margin-top: 12px;
+      max-height: 260px;
       overflow-y: auto;
       padding-right: 4px;
     }
+
     .per-hour-row {
       display: grid;
-      grid-template-columns: 64px 1fr;
+      grid-template-columns: 56px 1fr;
       gap: 8px;
       align-items: center;
+    }
+
+    .hidden {
+      display: none !important;
     }
 
     .content-wrap {
@@ -147,6 +187,7 @@
       inset: 58px 0 0 0;
       transition: margin-left 180ms ease;
     }
+
     body.sidebar-open .content-wrap {
       margin-left: 290px;
     }
@@ -154,24 +195,68 @@
     #map {
       width: 100%;
       height: 100%;
-      min-height: 420px;
       background: #202832;
     }
 
     .leaflet-control-zoom {
+      margin: 0 10px 10px 0 !important;
       z-index: 500;
-      margin-right: 10px !important;
-      margin-bottom: 10px !important;
     }
+
     body.sidebar-open .leaflet-control-zoom {
       display: none !important;
     }
 
-    .hidden { display: none !important; }
+    #status {
+      position: absolute;
+      left: 16px;
+      bottom: 16px;
+      z-index: 600;
+      background: rgba(13,17,23,0.8);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      pointer-events: none;
+    }
+
+    .charts-panel {
+      position: absolute;
+      right: 18px;
+      top: 22px;
+      width: min(420px, calc(100vw - 40px));
+      max-height: 88vh;
+      overflow-y: auto;
+      z-index: 700;
+      background: rgba(13,17,23,0.82);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.28);
+      padding: 14px;
+      backdrop-filter: blur(12px);
+    }
+
+    .chart-block {
+      margin-top: 16px;
+    }
+
+    .chart-block h3 {
+      margin: 0 0 10px 0;
+      font-size: 0.95rem;
+      color: var(--text);
+    }
+
+    .chart canvas {
+      max-height: 220px;
+    }
 
     @media (max-width: 700px) {
       .sidebar {
         width: min(82vw, 290px);
+      }
+      .charts-panel {
+        width: min(74vw, 320px);
       }
       body.sidebar-open .content-wrap {
         margin-left: 0;
@@ -181,13 +266,15 @@
 </head>
 <body class="sidebar-open">
   <header class="topbar">
-    <button id="menuToggle" class="menu-button" type="button" aria-label="Collapse favorites menu" aria-expanded="true">☰</button>
+    <button id="menuToggle" class="menu-button" type="button" aria-label="Collapse settings" aria-expanded="true">☰</button>
     <h1 class="title">Solar Forecast</h1>
   </header>
 
-  <aside id="sidebar" class="sidebar" aria-label="Favorite settings">
+  <aside id="sidebar" class="sidebar" aria-label="Solar settings panel">
     <div class="field">
-      <label><input id="batteryModeEnabled" type="checkbox" /> Enable battery mode</label>
+      <label>
+        <input id="batteryModeEnabled" type="checkbox" /> Enable battery mode
+      </label>
     </div>
 
     <div class="field">
@@ -230,110 +317,490 @@
     </div>
 
     <div id="perHourWrap" class="per-hour-grid hidden"></div>
+
+    <div class="field">
+      <label for="latitude">Latitude</label>
+      <input id="latitude" type="number" step="0.0001" value="40.7128" />
+    </div>
+
+    <div class="field">
+      <label for="longitude">Longitude</label>
+      <input id="longitude" type="number" step="0.0001" value="-74.0060" />
+    </div>
+
+    <div class="field">
+      <label for="panelTilt">Panel tilt (°)</label>
+      <input id="panelTilt" type="number" step="1" value="35" />
+    </div>
+
+    <div class="field">
+      <label for="panelAzimuth">Panel azimuth (°)</label>
+      <input id="panelAzimuth" type="number" step="1" value="180" />
+    </div>
+
+    <div class="field">
+      <label for="peakPower">Peak power (kW)</label>
+      <input id="peakPower" type="number" step="0.1" value="5" />
+    </div>
+
+    <div class="field">
+      <label for="lossPercent">System losses (%)</label>
+      <input id="lossPercent" type="number" step="0.1" value="14" />
+    </div>
+
+    <div class="field" style="margin-top:18px;">
+      <button id="forecastButton" class="primary-button" type="button">Get 16-day forecast</button>
+    </div>
   </aside>
 
   <div class="content-wrap">
     <div id="map" aria-label="Map"></div>
+    <div id="status">Ready</div>
+
+    <div class="charts-panel" aria-live="polite">
+      <div class="chart-block">
+        <h3>Daily production</h3>
+        <div class="chart"><canvas id="dailyChart"></canvas></div>
+      </div>
+      <div class="chart-block">
+        <h3>Hourly production</h3>
+        <div class="chart"><canvas id="hourlyChart"></canvas></div>
+      </div>
+    </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
     const elements = {
-      sidebar: document.getElementById("sidebar"),
-      menuToggle: document.getElementById("menuToggle"),
-      batteryModeEnabled: document.getElementById("batteryModeEnabled"),
-      loadMode: document.getElementById("loadMode"),
-      loadValue: document.getElementById("loadValue"),
-      loadUnit: document.getElementById("loadUnit"),
-      timeWindowWrap: document.getElementById("timeWindowWrap"),
-      perHourWrap: document.getElementById("perHourWrap"),
-      loadStartHour: document.getElementById("loadStartHour"),
-      loadStartMinute: document.getElementById("loadStartMinute"),
-      loadEndHour: document.getElementById("loadEndHour"),
-      loadEndMinute: document.getElementById("loadEndMinute")
+      sidebar: document.getElementById('sidebar'),
+      menuToggle: document.getElementById('menuToggle'),
+      batteryModeEnabled: document.getElementById('batteryModeEnabled'),
+      loadMode: document.getElementById('loadMode'),
+      loadValue: document.getElementById('loadValue'),
+      loadUnit: document.getElementById('loadUnit'),
+      timeWindowWrap: document.getElementById('timeWindowWrap'),
+      perHourWrap: document.getElementById('perHourWrap'),
+      loadStartHour: document.getElementById('loadStartHour'),
+      loadStartMinute: document.getElementById('loadStartMinute'),
+      loadEndHour: document.getElementById('loadEndHour'),
+      loadEndMinute: document.getElementById('loadEndMinute'),
+      latitude: document.getElementById('latitude'),
+      longitude: document.getElementById('longitude'),
+      panelTilt: document.getElementById('panelTilt'),
+      panelAzimuth: document.getElementById('panelAzimuth'),
+      peakPower: document.getElementById('peakPower'),
+      lossPercent: document.getElementById('lossPercent'),
+      status: document.getElementById('status'),
+      forecastButton: document.getElementById('forecastButton')
     };
+
+    let dailyChart = null;
+    let hourlyChart = null;
+    let marker = null;
+    const map = L.map('map').setView([40.7128, -74.006], 5);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19
+    }).addTo(map);
+
+    marker = L.marker([40.7128, -74.006]).addTo(map);
+
+    function setStatus(message, isError = false) {
+      elements.status.textContent = message;
+      elements.status.style.color = isError ? '#ff7b72' : '#9da7b3';
+    }
 
     function setSidebarOpen(open) {
       const isOpen = Boolean(open);
-      elements.sidebar.classList.toggle("collapsed", !isOpen);
-      document.body.classList.toggle("sidebar-open", isOpen);
-      elements.menuToggle.setAttribute("aria-expanded", String(isOpen));
-      elements.menuToggle.setAttribute("aria-label", isOpen ? "Collapse favorites menu" : "Open favorites menu");
-      if (map) {
-        setTimeout(() => map.invalidateSize(), 220);
-      }
+      document.body.classList.toggle('sidebar-open', isOpen);
+      elements.sidebar.classList.toggle('collapsed', !isOpen);
+      elements.menuToggle.setAttribute('aria-expanded', String(isOpen));
+      elements.menuToggle.setAttribute('aria-label', isOpen ? 'Collapse settings' : 'Open settings');
+      setTimeout(() => map.invalidateSize(), 220);
     }
 
     function populateTimeSelects() {
-      const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-      const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
-
-      elements.loadStartHour.innerHTML = hours.map((h) => `<option value="${h}">${h}</option>`).join("");
-      elements.loadEndHour.innerHTML = hours.map((h) => `<option value="${h}">${h}</option>`).join("");
-      elements.loadStartMinute.innerHTML = minutes.map((m) => `<option value="${m}">${m}</option>`).join("");
-      elements.loadEndMinute.innerHTML = minutes.map((m) => `<option value="${m}">${m}</option>`).join("");
-
-      elements.loadStartHour.value = "08";
-      elements.loadStartMinute.value = "00";
-      elements.loadEndHour.value = "18";
-      elements.loadEndMinute.value = "00";
+      const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+      const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
+      elements.loadStartHour.innerHTML = hours.map((h) => `<option value="${h}">${h}</option>`).join('');
+      elements.loadEndHour.innerHTML = hours.map((h) => `<option value="${h}">${h}</option>`).join('');
+      elements.loadStartMinute.innerHTML = minutes.map((m) => `<option value="${m}">${m}</option>`).join('');
+      elements.loadEndMinute.innerHTML = minutes.map((m) => `<option value="${m}">${m}</option>`).join('');
+      elements.loadStartHour.value = '08';
+      elements.loadStartMinute.value = '00';
+      elements.loadEndHour.value = '18';
+      elements.loadEndMinute.value = '00';
     }
 
     function buildPerHourInputs() {
-      elements.perHourWrap.innerHTML = Array.from({ length: 24 }, (_, index) => {
-        const label = `${String(index).padStart(2, "0")}:00`;
+      const rows = Array.from({ length: 24 }, (_, hour) => {
+        const timeLabel = `${String(hour).padStart(2, '0')}:00`;
         return `
           <div class="per-hour-row">
-            <label>${label}</label>
-            <input type="number" min="0" step="0.1" value="0" data-hour="${index}" aria-label="Load for ${label}" />
+            <label>${timeLabel}</label>
+            <input type="number" min="0" step="0.1" value="0" data-hour="${hour}" aria-label="Custom load for ${timeLabel}" />
           </div>
         `;
-      }).join("");
+      }).join('');
+      elements.perHourWrap.innerHTML = rows;
     }
 
     function updateLoadFieldVisibility() {
       const enabled = elements.batteryModeEnabled.checked;
       if (!enabled) {
-        elements.timeWindowWrap.classList.add("hidden");
-        elements.perHourWrap.classList.add("hidden");
+        elements.timeWindowWrap.classList.add('hidden');
+        elements.perHourWrap.classList.add('hidden');
         return;
       }
 
       const mode = elements.loadMode.value;
-      elements.timeWindowWrap.classList.toggle("hidden", mode !== "time-window");
-      elements.perHourWrap.classList.toggle("hidden", mode !== "per-hour");
+      elements.timeWindowWrap.classList.toggle('hidden', mode !== 'time-window');
+      elements.perHourWrap.classList.toggle('hidden', mode !== 'per-hour');
     }
 
-    document.addEventListener("click", (event) => {
-      const clickedSidebar = elements.sidebar.contains(event.target);
-      const clickedToggle = elements.menuToggle.contains(event.target);
-      const clickedInsideMap = event.target.closest("#map") || event.target.closest(".leaflet-control");
-      const sidebarOpen = document.body.classList.contains("sidebar-open");
+    function getLoadSettings() {
+      const loadValue = Number(elements.loadValue.value) || 0;
+      const loadKw = elements.loadUnit.value === 'kw' ? loadValue * 1000 : loadValue;
 
-      if (!clickedSidebar && !clickedToggle && !clickedInsideMap && sidebarOpen) {
-        setSidebarOpen(false);
+      const timeWindow = {
+        startHour: Number(elements.loadStartHour.value),
+        startMinute: Number(elements.loadStartMinute.value),
+        endHour: Number(elements.loadEndHour.value),
+        endMinute: Number(elements.loadEndMinute.value)
+      };
+
+      const perHour = Array.from({ length: 24 }, (_, hour) => {
+        const input = elements.perHourWrap.querySelector(`input[data-hour="${hour}"]`);
+        return Number((input && input.value) || 0);
+      });
+
+      return {
+        loadKw,
+        mode: elements.loadMode.value,
+        batteryMode: elements.batteryModeEnabled.checked,
+        timeWindow,
+        perHour
+      };
+    }
+
+    function minutesFromTime(hour, minute = 0) {
+      return hour * 60 + minute;
+    }
+
+    function getLoadForHour(date, settings) {
+      const hour = date.getHours();
+      if (!settings.batteryMode) return 0;
+      if (settings.mode === 'constant-day') return settings.loadKw;
+      if (settings.mode === 'time-window') {
+        const start = minutesFromTime(settings.timeWindow.startHour, settings.timeWindow.startMinute);
+        const end = minutesFromTime(settings.timeWindow.endHour, settings.timeWindow.endMinute);
+        const now = minutesFromTime(date.getHours(), date.getMinutes());
+        const active = start <= end ? (now >= start && now < end) : (now >= start || now < end);
+        return active ? settings.loadKw : 0;
       }
-    });
+      if (settings.mode === 'per-hour') {
+        return (settings.perHour[hour] || 0) * 1000;
+      }
+      return 0;
+    }
 
-    elements.menuToggle.addEventListener("click", (event) => {
-      event.stopPropagation();
-      setSidebarOpen(!document.body.classList.contains("sidebar-open"));
-    });
+    function getSolarGeometry(lat, lon, date) {
+      const rad = (deg) => (deg * Math.PI) / 180;
+      const deg = (radValue) => (radValue * 180) / Math.PI;
+      const dayOfYear = Math.floor((Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) - Date.UTC(date.getFullYear(), 0, 0)) / 86400000);
+      const declination = 23.45 * Math.sin(rad((360 / 365) * (dayOfYear - 81)));
+      const hourAngle = rad((date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600 - 12) * 15);
+      const latRad = rad(lat);
 
-    elements.batteryModeEnabled.addEventListener("change", updateLoadFieldVisibility);
-    elements.loadMode.addEventListener("change", updateLoadFieldVisibility);
+      const sunAltitude = Math.asin(
+        Math.sin(latRad) * Math.sin(rad(declination)) +
+        Math.cos(latRad) * Math.cos(rad(declination)) * Math.cos(hourAngle)
+      );
 
-    const map = L.map("map").setView([40.7128, -74.006], 5);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19
-    }).addTo(map);
-    map.zoomControl.setPosition("bottomright");
+      const sunAzimuth = Math.atan2(
+        Math.sin(hourAngle),
+        Math.cos(hourAngle) * Math.sin(latRad) - Math.tan(rad(declination)) * Math.cos(latRad)
+      );
+
+      const panelTilt = rad(Number(elements.panelTilt.value || 0));
+      const panelAzimuth = rad(Number(elements.panelAzimuth.value || 0));
+      const angle = Math.max(0, Math.sin(sunAltitude) * Math.cos(panelTilt) +
+        Math.cos(sunAltitude) * Math.sin(panelTilt) * Math.cos(sunAzimuth(sunAzimuth, panelAzimuth)));
+
+      return {
+        sunAltitude,
+        sunAzimuth,
+        panelTilt,
+        panelAzimuth,
+        incidenceFactor: angle
+      };
+    }
+
+    function sunAzimuthToDegrees(value) {
+      const degValue = deg(value);
+      return (degValue + 360) % 360;
+    }
+
+    function getSolarProductionForHour(date, irradianceWm2, lat, lon) {
+      const panelTilt = Number(elements.panelTilt.value || 0);
+      const azimuth = Number(elements.panelAzimuth.value || 0);
+      const peakPowerKw = Number(elements.peakPower.value || 0);
+      const lossPercent = Number(elements.lossPercent.value || 0) / 100;
+
+      const panelArea = (peakPowerKw * 1000) / 1000; // rough area proxy, in m²
+      const geometry = getSolarGeometry(lat, lon, date);
+      const incidenceFactor = Math.max(0, geometry.incidenceFactor || 0);
+      const netIrradiance = irradianceWm2 * incidenceFactor;
+      const generationKw = (netIrradiance * panelArea * (1 - lossPercent)) / 1000;
+      return Math.max(0, generationKw);
+    }
+
+    function parseFloatSafe(value) {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : 0;
+    }
+
+    async function fetchForecast() {
+      const lat = Number(elements.latitude.value);
+      const lon = Number(elements.longitude.value);
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        setStatus('Latitude and longitude must be valid numbers.', true);
+        return null;
+      }
+
+      const params = new URLSearchParams({
+        latitude: String(lat),
+        longitude: String(lon),
+        hourly: 'shortwave_radiation',
+        forecast_days: '16',
+        timezone: 'auto'
+      });
+
+      const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
+      setStatus('Loading forecast from Open-Meteo...');
+
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Open-Meteo request failed');
+        const data = await res.json();
+        if (!data.hourly || !Array.isArray(data.hourly.time) || !Array.isArray(data.hourly.shortwave_radiation)) {
+          throw new Error('Open-Meteo response missing hourly data');
+        }
+        return data;
+      } catch (error) {
+        setStatus(error.message || 'Forecast failed', true);
+        return null;
+      }
+    }
+
+    function buildForecastRows(data) {
+      const lat = Number(elements.latitude.value);
+      const lon = Number(elements.longitude.value);
+      const settings = getLoadSettings();
+      const rows = [];
+      const mapByDay = new Map();
+
+      for (let i = 0; i < data.hourly.time.length; i++) {
+        const iso = data.hourly.time[i];
+        const date = new Date(iso);
+        const irradiance = parseFloatSafe(data.hourly.shortwave_radiation[i]);
+        const production = getSolarProductionForHour(date, irradiance, lat, lon);
+        const load = getLoadForHour(date, settings);
+        const batteryDelta = Math.max(0, production - load);
+        const deficit = Math.max(0, load - production);
+
+        const row = {
+          iso,
+          date,
+          hour: date.getHours(),
+          irradiance,
+          production,
+          load,
+          deficit,
+          batteryDelta,
+          batteryLevel: 0
+        };
+
+        rows.push(row);
+
+        const dayKey = iso.slice(0, 10);
+        if (!mapByDay.has(dayKey)) {
+          mapByDay.set(dayKey, {
+            day: dayKey,
+            totalProduction: 0,
+            totalLoad: 0,
+            totalDeficit: 0,
+            hours: []
+          });
+        }
+        const bucket = mapByDay.get(dayKey);
+        bucket.totalProduction += production;
+        bucket.totalLoad += load;
+        bucket.totalDeficit += deficit;
+        bucket.hours.push(row);
+      }
+
+      const daily = Array.from(mapByDay.values()).map((bucket) => ({
+        day: bucket.day,
+        totalProduction: bucket.totalProduction,
+        totalLoad: bucket.totalLoad,
+        totalDeficit: bucket.totalDeficit,
+        hours: bucket.hours
+      }));
+
+      return { rows, daily };
+    }
+
+    function destroyCharts() {
+      if (dailyChart) {
+        dailyChart.destroy();
+        dailyChart = null;
+      }
+      if (hourlyChart) {
+        hourlyChart.destroy();
+        hourlyChart = null;
+      }
+    }
+
+    function renderCharts(rows, daily) {
+      destroyCharts();
+
+      const reduction = daily.map((d) => ({
+        label: d.day.slice(5),
+        production: Number(d.totalProduction.toFixed(2)),
+        deficit: Number(d.totalDeficit.toFixed(2))
+      }));
+
+      dailyChart = new Chart(document.getElementById('dailyChart'), {
+        type: 'bar',
+        data: {
+          labels: reduction.map((d) => d.label),
+          datasets: [
+            {
+              label: 'Production',
+              data: reduction.map((d) => d.production),
+              backgroundColor: '#79d4ff',
+              borderRadius: 4,
+              borderSkipped: false,
+            },
+            {
+              label: 'Deficit',
+              data: reduction.map((d) => -Math.max(0, d.deficit)),
+              backgroundColor: '#ff7b72',
+              borderRadius: 4,
+              borderSkipped: false,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          scales: {
+            y: {
+              beginAtZero: false,
+              grid: { color: 'rgba(255,255,255,0.08)' }
+            }
+          },
+          plugins: {
+            legend: { display: true }
+          }
+        }
+      });
+
+      const hourlySeries = rows.slice(-24).map((row) => ({
+        label: row.date.getHours() + ':00',
+        production: Number(row.production.toFixed(2)),
+        deficit: Number(Math.max(0, row.deficit).toFixed(2))
+      }));
+
+      hourlyChart = new Chart(document.getElementById('hourlyChart'), {
+        type: 'bar',
+        data: {
+          labels: hourlySeries.map((d) => d.label),
+          datasets: [
+            {
+              label: 'Production',
+              data: hourlySeries.map((d) => d.production),
+              backgroundColor: '#79d4ff',
+              borderRadius: 4,
+              borderSkipped: false,
+            },
+            {
+              label: 'Deficit',
+              data: hourlySeries.map((d) => -d.deficit),
+              backgroundColor: '#ff7b72',
+              borderRadius: 4,
+              borderSkipped: false,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          scales: {
+            y: {
+              beginAtZero: false,
+              grid: { color: 'rgba(255,255,255,0.08)' }
+            }
+          },
+          plugins: {
+            legend: { display: true }
+          }
+        }
+      });
+    }
+
+    async function runForecast() {
+      const data = await fetchForecast();
+      if (!data) return;
+
+      const forecast = buildForecastRows(data);
+      const totalProduction = forecast.rows.reduce((sum, row) => sum + row.production, 0);
+      setStatus(`Forecast loaded. Total production: ${totalProduction.toFixed(2)} kW`);
+      renderCharts(forecast.rows, forecast.daily);
+
+      const lat = Number(elements.latitude.value);
+      const lon = Number(elements.longitude.value);
+      marker.setLatLng([lat, lon]);
+      map.setView([lat, lon], 7);
+    }
+
+    function bindEvents() {
+      elements.menuToggle.addEventListener('click', (event) => {
+        event.stopPropagation();
+        setSidebarOpen(!document.body.classList.contains('sidebar-open'));
+      });
+
+      document.addEventListener('click', (event) => {
+        const clickedSidebar = elements.sidebar.contains(event.target);
+        const clickedToggle = elements.menuToggle.contains(event.target);
+        const clickedInsideMap = event.target.closest('#map') || event.target.closest('.leaflet-control');
+        const sidebarOpen = document.body.classList.contains('sidebar-open');
+
+        if (!clickedSidebar && !clickedToggle && !clickedInsideMap && sidebarOpen) {
+          setSidebarOpen(false);
+        }
+      });
+
+      elements.batteryModeEnabled.addEventListener('change', updateLoadFieldVisibility);
+      elements.loadMode.addEventListener('change', updateLoadFieldVisibility);
+      elements.forecastButton.addEventListener('click', runForecast);
+      elements.latitude.addEventListener('change', () => marker.setLatLng([Number(elements.latitude.value), Number(elements.longitude.value)]));
+      elements.longitude.addEventListener('change', () => marker.setLatLng([Number(elements.latitude.value), Number(elements.longitude.value)]));
+      elements.batteryModeEnabled.addEventListener('change', updateLoadFieldVisibility);
+    }
 
     populateTimeSelects();
     buildPerHourInputs();
     updateLoadFieldVisibility();
+    bindEvents();
     setSidebarOpen(true);
+    runForecast();
   </script>
 </body>
 </html>
