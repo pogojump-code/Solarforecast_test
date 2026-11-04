@@ -5,7 +5,7 @@ irradiance.
 
 ## Use
 
-Open the published site, tap the map to choose a location, enter panel settings,
+Open https://pogojump-code.github.io/Solarforecast_test/, tap the map to choose a location, enter panel settings,
 and select **Get 16-day forecast**. Favorites are stored in the browser on that
 device.
 
