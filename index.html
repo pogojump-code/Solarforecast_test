@@ -2,11 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Solar Forecast</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0d1117" />
+  <title>Solar Production Forecast</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     :root {
+      color-scheme: dark;
       --bg: #0d1117;
       --panel: #161b22;
       --panel-2: #1d2632;
@@ -16,34 +18,29 @@
       --accent: #f0b429;
       --accent-hover: #ffc94d;
       --danger: #ff7b72;
-      --battery: #8ae3b6;
-      --load: #7ab8ff;
-      --lost: #ff8a80;
-      --shadow: rgba(0,0,0,0.25);
+      --good: #6ee7b7;
+      --charge: #79d4ff;
+      --consume: #f5a623;
+      --unused: #8b95a7;
+      --shadow: rgba(0,0,0,.35);
     }
 
     * { box-sizing: border-box; }
-    html, body {
+    html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+    body {
       margin: 0;
-      width: 100%;
-      height: 100%;
       background: var(--bg);
       color: var(--text);
-      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
-      overflow: hidden;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    body.sidebar-open .leaflet-control-zoom {
-      display: block;
-    }
-    body:not(.sidebar-open) .leaflet-control-zoom {
-      display: block;
-    }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
 
     .topbar {
       position: sticky;
       top: 0;
-      z-index: 1200;
+      z-index: 1100;
       display: flex;
       align-items: center;
       gap: 12px;
@@ -57,750 +54,1632 @@
     .menu-button,
     .primary-button,
     .secondary-button,
-    input,
-    select,
-    button {
-      font: inherit;
-    }
-
-    .menu-button,
-    .primary-button,
-    .secondary-button {
+    .favorite-button,
+    .favorite-action-button,
+    .favorite-delete-button,
+    .mini-button {
       border: 1px solid var(--border);
       border-radius: 8px;
       color: var(--text);
       background: var(--panel-2);
-      cursor: pointer;
     }
 
-    .menu-button {
-      padding: 7px 11px;
-    }
+    .menu-button { padding: 7px 11px; }
+    .menu-button:hover,
+    .secondary-button:hover,
+    .favorite-button:hover,
+    .favorite-action-button:hover,
+    .favorite-delete-button:hover,
+    .mini-button:hover { background: #293442; }
 
-    .primary-button,
-    .secondary-button {
-      padding: 9px 13px;
-    }
+    .app-title { margin: 0; font-size: 1.05rem; }
 
-    .primary-button {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #111;
-      font-weight: 700;
-    }
-
-    .primary-button:hover { background: var(--accent-hover); }
-
-    .title {
-      margin: 0;
-      font-size: 1.05rem;
-      font-weight: 700;
+    .selected-name {
+      margin-left: auto;
+      max-width: min(55vw, 520px);
+      overflow: hidden;
+      color: var(--accent);
+      font-weight: 750;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .sidebar {
       position: fixed;
-      top: 58px;
-      left: 0;
-      bottom: 0;
-      width: 290px;
       z-index: 1050;
+      top: 58px;
+      bottom: 0;
+      left: 0;
+      width: 290px;
       padding: 16px;
+      overflow-y: auto;
       background: var(--panel);
       border-right: 1px solid var(--border);
-      overflow-y: auto;
       transform: translateX(0);
       transition: transform 180ms ease;
-      box-shadow: 8px 0 20px rgba(0,0,0,0.15);
     }
 
-    .sidebar.collapsed {
-      transform: translateX(-100%);
+    .sidebar.collapsed { transform: translateX(-100%); }
+    .sidebar h2 { margin: 0 0 12px; font-size: 1rem; }
+
+    .sidebar-note,
+    .help-text,
+    .status {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.4;
     }
 
-    .field {
+    .favorite-list {
       display: grid;
-      gap: 6px;
+      gap: 8px;
       margin-top: 12px;
     }
 
-    .field label {
-      color: var(--muted);
-      font-size: 0.82rem;
-    }
-
-    .inline-row {
+    .favorite-row {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       align-items: center;
-      flex-wrap: wrap;
     }
 
-    .inline-row .field {
-      margin-top: 0;
+    .favorite-button {
       flex: 1;
-      min-width: 110px;
+      min-width: 0;
+      padding: 9px 10px;
+      overflow: hidden;
+      text-align: left;
+      white-space: normal;
+      line-height: 1.3;
+      word-break: break-word;
+      font-size: 0.76rem;
     }
 
-    input, select {
+    .favorite-action-button,
+    .favorite-delete-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      padding: 0;
+      font-size: 1rem;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .favorite-delete-button {
+      color: var(--danger);
+      background: transparent;
+    }
+
+    .favorite-delete-button:hover { background: #352126; }
+
+    main {
+      width: min(1100px, 100%);
+      margin: 0 auto;
+      padding: 20px;
+      transition: margin-left 180ms ease;
+    }
+
+    body.sidebar-open main {
+      margin-left: 290px;
+      width: calc(100% - 290px);
+    }
+
+    .card {
+      margin-bottom: 16px;
+      padding: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .card h2 { margin: 0 0 14px; font-size: 1.15rem; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(110px, 1fr));
+      gap: 12px;
+    }
+
+    .field { display: grid; gap: 6px; }
+    .field label { color: var(--muted); font-size: 0.85rem; }
+
+    .field input,
+    .field select,
+    .search-row input {
       width: 100%;
       padding: 9px 10px;
       border: 1px solid var(--border);
       border-radius: 8px;
-      background: #0d1117;
       color: var(--text);
+      background: #0d1117;
     }
 
-    .time-window-inline {
+    .input-with-unit {
       display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-top: 12px;
-    }
-
-    .time-window-inline .field {
-      flex: 1;
-      min-width: 110px;
-    }
-
-    .per-hour-grid {
-      display: grid;
-      gap: 8px;
-      margin-top: 12px;
-      max-height: 260px;
-      overflow-y: auto;
-      padding-right: 4px;
-    }
-
-    .per-hour-row {
-      display: grid;
-      grid-template-columns: 56px 1fr;
-      gap: 8px;
+      gap: 6px;
       align-items: center;
     }
 
-    .hidden {
-      display: none !important;
+    .input-with-unit input { flex: 1; min-width: 0; }
+    .input-with-unit select { width: auto; min-width: 110px; }
+
+    .preset-name-field { margin: 0 0 14px; }
+    .preset-name-field input { max-width: 480px; }
+    .parameter-input.favorite-selected {
+      font-weight: 800;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(240, 180, 41, 0.2);
     }
 
-    .content-wrap {
-      position: fixed;
-      inset: 58px 0 0 0;
-      transition: margin-left 180ms ease;
-    }
+    .button-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .primary-button, .secondary-button, .mini-button { padding: 9px 13px; }
 
-    body.sidebar-open .content-wrap {
-      margin-left: 290px;
+    .primary-button {
+      color: #151515;
+      background: var(--accent);
+      border-color: var(--accent);
+      font-weight: 700;
     }
+    .primary-button:hover { background: var(--accent-hover); }
+
+    .search-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+      align-items: center;
+    }
+    .search-row input { flex: 1; min-width: 0; }
 
     #map {
-      width: 100%;
-      height: 100%;
+      height: 330px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 10px;
       background: #202832;
     }
 
-    .leaflet-control-zoom {
-      margin: 0 10px 10px 0 !important;
-      z-index: 500;
+    .status { min-height: 1.4em; margin-top: 10px; }
+    .status.error { color: var(--danger); }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
     }
 
-    body.sidebar-open .leaflet-control-zoom {
-      display: none !important;
-    }
-
-    #status {
-      position: absolute;
-      left: 16px;
-      bottom: 16px;
-      z-index: 600;
-      background: rgba(13,17,23,0.8);
+    .summary-item {
+      padding: 12px;
+      background: #0d1117;
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 8px 12px;
+      border-radius: 9px;
+    }
+
+    .summary-item span {
+      display: block;
+      margin-bottom: 4px;
       color: var(--muted);
       font-size: 0.82rem;
-      pointer-events: none;
     }
 
-    .charts-panel {
-      position: absolute;
-      right: 18px;
-      top: 22px;
-      width: min(420px, calc(100vw - 40px));
-      max-height: 88vh;
-      overflow-y: auto;
-      z-index: 700;
-      background: rgba(13,17,23,0.82);
+    .summary-item strong { font-size: 1.12rem; }
+
+    .chart-wrap {
+      position: relative;
+      height: 310px;
+      margin: 16px 0 22px;
+    }
+
+    .chart-wrap h3 { margin: 0 0 8px; font-size: 1rem; }
+    .summary-chart-section { margin-top: 18px; }
+
+    .hourly-charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 12px;
+    }
+
+    .hourly-day-card {
+      padding: 12px;
+      background: #0d1117;
       border: 1px solid var(--border);
-      border-radius: 12px;
-      box-shadow: 0 15px 35px rgba(0,0,0,0.28);
-      padding: 14px;
-      backdrop-filter: blur(12px);
+      border-radius: 10px;
     }
 
-    .chart-block {
-      margin-top: 16px;
+    .hourly-day-card h3 { margin: 0 0 10px; font-size: 0.95rem; }
+    .hourly-chart-wrap { position: relative; height: 220px; }
+
+    .battery-wrapper {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
     }
 
-    .chart-block h3 {
-      margin: 0 0 10px 0;
-      font-size: 0.95rem;
-      color: var(--text);
+    .battery-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
     }
 
-    .chart canvas {
-      max-height: 220px;
+    .battery-header h3 { margin: 0; font-size: 1rem; }
+    .battery-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(110px, 1fr));
+      gap: 12px;
     }
 
-    @media (max-width: 700px) {
-      .sidebar {
-        width: min(82vw, 290px);
-      }
-      .charts-panel {
-        width: min(74vw, 320px);
-      }
-      body.sidebar-open .content-wrap {
-        margin-left: 0;
-      }
+    .battery-rows {
+      display: grid;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .battery-window-row {
+      display: grid;
+      grid-template-columns: 120px 120px 150px 120px;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .inline-label {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.3;
+    }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    th { color: var(--muted); font-size: 0.85rem; }
+    .empty-state {
+      padding: 24px 8px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      body.sidebar-open main { margin-left: 0; width: 100%; }
+      .sidebar { box-shadow: 12px 0 32px rgba(0,0,0,.35); }
+      main { padding: 14px; }
+      .form-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+      .battery-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+      .battery-window-row { grid-template-columns: repeat(2, minmax(100px, 1fr)); }
+    }
+
+    @media (max-width: 520px) {
+      .app-title { font-size: 0.95rem; }
+      .selected-name { max-width: 38vw; font-size: 0.87rem; }
+      .summary { grid-template-columns: 1fr; }
+      .battery-grid { grid-template-columns: 1fr; }
+      .battery-window-row { grid-template-columns: 1fr; }
+      #map { height: 290px; }
+      .chart-wrap { height: 270px; }
+      .favorite-button { font-size: 0.72rem; }
     }
   </style>
 </head>
 <body class="sidebar-open">
   <header class="topbar">
-    <button id="menuToggle" class="menu-button" type="button" aria-label="Collapse settings" aria-expanded="true">☰</button>
-    <h1 class="title">Solar Forecast</h1>
+    <button id="menuToggle" class="menu-button" type="button" aria-label="Collapse favorites menu" aria-expanded="true">☰</button>
+    <h1 class="app-title">Solar Forecast</h1>
+    <div id="selectedNameDisplay" class="selected-name" aria-live="polite"></div>
   </header>
 
-  <aside id="sidebar" class="sidebar" aria-label="Solar settings panel">
-    <div class="field">
-      <label>
-        <input id="batteryModeEnabled" type="checkbox" /> Enable battery mode
-      </label>
-    </div>
-
-    <div class="field">
-      <label for="loadMode">Load mode</label>
-      <select id="loadMode">
-        <option value="constant-day">constant through day</option>
-        <option value="time-window">constant through time window</option>
-        <option value="per-hour">custom per hour</option>
-      </select>
-    </div>
-
-    <div class="field">
-      <label for="loadValue">Load value</label>
-      <div class="inline-row">
-        <input id="loadValue" type="number" min="0" step="1" value="1500" />
-        <select id="loadUnit" aria-label="Load unit">
-          <option value="w" selected>W</option>
-          <option value="kw">kW</option>
-        </select>
-      </div>
-    </div>
-
-    <div id="timeWindowWrap" class="time-window-inline hidden">
-      <div class="field">
-        <label for="loadStartHour">Start</label>
-        <div class="inline-row">
-          <select id="loadStartHour"></select>
-          <span>:</span>
-          <select id="loadStartMinute"></select>
-        </div>
-      </div>
-      <div class="field">
-        <label for="loadEndHour">End</label>
-        <div class="inline-row">
-          <select id="loadEndHour"></select>
-          <span>:</span>
-          <select id="loadEndMinute"></select>
-        </div>
-      </div>
-    </div>
-
-    <div id="perHourWrap" class="per-hour-grid hidden"></div>
-
-    <div class="field">
-      <label for="latitude">Latitude</label>
-      <input id="latitude" type="number" step="0.0001" value="40.7128" />
-    </div>
-
-    <div class="field">
-      <label for="longitude">Longitude</label>
-      <input id="longitude" type="number" step="0.0001" value="-74.0060" />
-    </div>
-
-    <div class="field">
-      <label for="panelTilt">Panel tilt (°)</label>
-      <input id="panelTilt" type="number" step="1" value="35" />
-    </div>
-
-    <div class="field">
-      <label for="panelAzimuth">Panel azimuth (°)</label>
-      <input id="panelAzimuth" type="number" step="1" value="180" />
-    </div>
-
-    <div class="field">
-      <label for="peakPower">Peak power (kW)</label>
-      <input id="peakPower" type="number" step="0.1" value="5" />
-    </div>
-
-    <div class="field">
-      <label for="lossPercent">System losses (%)</label>
-      <input id="lossPercent" type="number" step="0.1" value="14" />
-    </div>
-
-    <div class="field" style="margin-top:18px;">
-      <button id="forecastButton" class="primary-button" type="button">Get 16-day forecast</button>
-    </div>
+  <aside id="sidebar" class="sidebar" aria-label="Favorite settings">
+    <h2>Favorite settings</h2>
+    <p class="sidebar-note">Choose a favorite to load its settings and forecast.</p>
+    <div id="favoriteList" class="favorite-list"></div>
+    <p id="noFavorites" class="help-text">No favorites saved yet.</p>
   </aside>
 
-  <div class="content-wrap">
-    <div id="map" aria-label="Map"></div>
-    <div id="status">Ready</div>
+  <main>
+    <section class="card">
+      <h2>Location</h2>
+      <div class="search-row">
+        <input id="placeSearch" type="search" placeholder="Search for a place" autocomplete="off" />
+        <button id="searchButton" class="primary-button" type="button">Search</button>
+        <button id="locateButton" class="secondary-button" type="button">Use my location</button>
+      </div>
+      <div id="map" aria-label="Select a location on the map"></div>
+      <div id="locationStatus" class="status">Search for a place, click the map, or use your device location.</div>
+      <div id="locationAccuracy" class="help-text" aria-live="polite"></div>
+    </section>
 
-    <div class="charts-panel" aria-live="polite">
-      <div class="chart-block">
-        <h3>Daily production</h3>
-        <div class="chart"><canvas id="dailyChart"></canvas></div>
+    <section class="card">
+      <h2>Solar panel settings</h2>
+
+      <div class="field preset-name-field">
+        <label for="favoriteName">Favorite / place name</label>
+        <input id="favoriteName" type="text" placeholder="Enter a name to save these settings" />
       </div>
-      <div class="chart-block">
-        <h3>Hourly production</h3>
-        <div class="chart"><canvas id="hourlyChart"></canvas></div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="latitude">Latitude</label>
+          <input class="parameter-input" id="latitude" type="number" step="any" value="40.7128" />
+        </div>
+        <div class="field">
+          <label for="longitude">Longitude</label>
+          <input class="parameter-input" id="longitude" type="number" step="any" value="-74.0060" />
+        </div>
+        <div class="field">
+          <label for="tilt">Panel tilt (°)</label>
+          <input class="parameter-input" id="tilt" type="number" min="0" max="90" step="1" value="0" />
+        </div>
+        <div class="field">
+          <label for="azimuth">Panel azimuth (°)</label>
+          <input class="parameter-input" id="azimuth" type="number" min="-180" max="180" step="1" value="0" />
+        </div>
+        <div class="field">
+          <label for="peakPower">Peak power (kW)</label>
+          <input class="parameter-input" id="peakPower" type="number" min="0.001" step="any" value="0.285" />
+        </div>
+        <div class="field">
+          <label for="lossPercent">System losses (%)</label>
+          <input class="parameter-input" id="lossPercent" type="number" min="0" max="100" step="0.1" value="14" />
+        </div>
       </div>
-    </div>
-  </div>
+
+      <div class="battery-wrapper">
+        <div class="battery-header">
+          <h3>Battery mode</h3>
+          <label class="inline-label"><input id="batteryModeEnabled" type="checkbox" /> Enable battery mode</label>
+        </div>
+
+        <div id="batterySettingsBlock" class="battery-grid" style="display:none;">
+          <div class="field">
+            <label for="batteryCapacityInput">Battery capacity</label>
+            <div class="input-with-unit">
+              <input id="batteryCapacityInput" type="number" min="0" step="0.1" value="5" />
+              <select id="batteryCapacityUnit">
+                <option value="kwh">kWh</option>
+                <option value="ah12.8">Ah 12.8V</option>
+                <option value="ah25.6">Ah 25.6V</option>
+                <option value="ah51.2">Ah 51.2V</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="batteryMinLevel">Min level</label>
+            <div class="input-with-unit">
+              <input id="batteryMinLevel" type="number" min="0" max="100" step="1" value="20" />
+              <select aria-label="Battery minimum level unit">
+                <option>%</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="batteryLevelInput">Battery level now</label>
+            <div class="input-with-unit">
+              <input id="batteryLevelInput" type="number" min="0" step="0.1" value="80" />
+              <select id="batteryLevelUnit">
+                <option value="percent">%</option>
+                <option value="kwh">kWh</option>
+                <option value="ah12.8">Ah 12.8V</option>
+                <option value="ah25.6">Ah 25.6V</option>
+                <option value="ah51.2">Ah 51.2V</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="batteryGraphUnit">Battery graph</label>
+            <select id="batteryGraphUnit">
+              <option value="percent">%</option>
+              <option value="kwh">kWh</option>
+              <option value="ah12.8">Ah 12.8V</option>
+              <option value="ah25.6">Ah 25.6V</option>
+              <option value="ah51.2">Ah 51.2V</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="batteryDynamicBlock" class="battery-grid" style="display:none; margin-top:12px;">
+          <div class="field">
+            <label for="consumptionValue">Consumption</label>
+            <div class="input-with-unit">
+              <input id="consumptionValue" type="number" min="0" step="1" value="1500" />
+              <select id="consumptionUnit">
+                <option value="w">W</option>
+                <option value="kw">kW</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="consumptionMode">Consumption mode</label>
+            <select id="consumptionMode">
+              <option value="constant-day">Constant / day</option>
+              <option value="windows">Selected windows</option>
+              <option value="hourly">Hour by hour</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="consumptionPer">Per</label>
+            <select id="consumptionPer">
+              <option value="hour">Hour</option>
+              <option value="day">Day</option>
+              <option value="week">Week</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="consumptionBuffer">&nbsp;</label>
+            <button type="button" class="mini-button" id="batteryResetButton">Reset profile</button>
+          </div>
+        </div>
+
+        <div id="batteryWindowsBlock" class="battery-rows" style="display:none;">
+          <div class="inline-label">Consumption windows</div>
+          <div id="windowRowsContainer"></div>
+          <button type="button" class="mini-button" id="addWindowButton">+ Add window</button>
+        </div>
+
+        <div id="batteryHourlyBlock" class="battery-rows" style="display:none;">
+          <div class="inline-label">Hourly consumption profile (W / hour)</div>
+          <div id="hourlyConsumptionGrid" class="battery-grid"></div>
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button id="forecastButton" class="primary-button" type="button">Get 16-day forecast</button>
+        <button id="saveFavoriteButton" class="secondary-button" type="button">Save as new favorite</button>
+        <button id="clearSelectionButton" class="secondary-button" type="button">Clear favorite selection</button>
+      </div>
+
+      <div id="forecastStatus" class="status" role="status"></div>
+      <p class="help-text">Azimuth convention: 0° = south, −90° = east, 90° = west, and ±180° = north. System losses estimate wiring, inverter, soiling, temperature, and other efficiency reductions.</p>
+    </section>
+
+    <section id="forecast" class="card">
+      <h2>Daily energy forecast</h2>
+      <div id="forecastContent" class="empty-state">Select a location and request a forecast.</div>
+
+      <div id="forecastResults" hidden>
+        <div class="summary">
+          <div class="summary-item">
+            <span>Forecast period</span>
+            <strong id="periodSummary">—</strong>
+          </div>
+          <div class="summary-item">
+            <span>Total energy</span>
+            <strong id="totalSummary">—</strong>
+          </div>
+          <div class="summary-item">
+            <span>Daily average</span>
+            <strong id="averageSummary">—</strong>
+          </div>
+        </div>
+
+        <div class="chart-wrap">
+          <h3>Daily energy</h3>
+          <canvas id="dailyChart"></canvas>
+        </div>
+
+        <div class="chart-wrap">
+          <h3>Cumulative energy</h3>
+          <canvas id="cumulativeChart"></canvas>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Daily energy (kWh)</th>
+                <th>Cumulative energy (kWh)</th>
+              </tr>
+            </thead>
+            <tbody id="forecastTable"></tbody>
+          </table>
+        </div>
+
+        <div class="summary-chart-section">
+          <h3>Hourly production by day</h3>
+          <div id="hourlyChartsContainer" class="hourly-charts-grid"></div>
+        </div>
+      </div>
+    </section>
+  </main>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <script>
+    const STORAGE_KEY = "solarForecastFavorites_v1";
+
     const elements = {
-      sidebar: document.getElementById('sidebar'),
-      menuToggle: document.getElementById('menuToggle'),
-      batteryModeEnabled: document.getElementById('batteryModeEnabled'),
-      loadMode: document.getElementById('loadMode'),
-      loadValue: document.getElementById('loadValue'),
-      loadUnit: document.getElementById('loadUnit'),
-      timeWindowWrap: document.getElementById('timeWindowWrap'),
-      perHourWrap: document.getElementById('perHourWrap'),
-      loadStartHour: document.getElementById('loadStartHour'),
-      loadStartMinute: document.getElementById('loadStartMinute'),
-      loadEndHour: document.getElementById('loadEndHour'),
-      loadEndMinute: document.getElementById('loadEndMinute'),
-      latitude: document.getElementById('latitude'),
-      longitude: document.getElementById('longitude'),
-      panelTilt: document.getElementById('panelTilt'),
-      panelAzimuth: document.getElementById('panelAzimuth'),
-      peakPower: document.getElementById('peakPower'),
-      lossPercent: document.getElementById('lossPercent'),
-      status: document.getElementById('status'),
-      forecastButton: document.getElementById('forecastButton')
+      sidebar: document.getElementById("sidebar"),
+      menuToggle: document.getElementById("menuToggle"),
+      favoriteList: document.getElementById("favoriteList"),
+      noFavorites: document.getElementById("noFavorites"),
+      name: document.getElementById("favoriteName"),
+      nameDisplay: document.getElementById("selectedNameDisplay"),
+      latitude: document.getElementById("latitude"),
+      longitude: document.getElementById("longitude"),
+      tilt: document.getElementById("tilt"),
+      azimuth: document.getElementById("azimuth"),
+      peakPower: document.getElementById("peakPower"),
+      lossPercent: document.getElementById("lossPercent"),
+      placeSearch: document.getElementById("placeSearch"),
+      locateButton: document.getElementById("locateButton"),
+      locationStatus: document.getElementById("locationStatus"),
+      locationAccuracy: document.getElementById("locationAccuracy"),
+      forecastStatus: document.getElementById("forecastStatus"),
+      forecastContent: document.getElementById("forecastContent"),
+      forecastResults: document.getElementById("forecastResults"),
+      forecastTable: document.getElementById("forecastTable"),
+      periodSummary: document.getElementById("periodSummary"),
+      totalSummary: document.getElementById("totalSummary"),
+      averageSummary: document.getElementById("averageSummary"),
+      hourlyChartsContainer: document.getElementById("hourlyChartsContainer"),
+      batteryModeEnabled: document.getElementById("batteryModeEnabled"),
+      batterySettingsBlock: document.getElementById("batterySettingsBlock"),
+      batteryDynamicBlock: document.getElementById("batteryDynamicBlock"),
+      batteryCapacityInput: document.getElementById("batteryCapacityInput"),
+      batteryCapacityUnit: document.getElementById("batteryCapacityUnit"),
+      batteryMinLevel: document.getElementById("batteryMinLevel"),
+      batteryLevelInput: document.getElementById("batteryLevelInput"),
+      batteryLevelUnit: document.getElementById("batteryLevelUnit"),
+      batteryGraphUnit: document.getElementById("batteryGraphUnit"),
+      consumptionValue: document.getElementById("consumptionValue"),
+      consumptionUnit: document.getElementById("consumptionUnit"),
+      consumptionMode: document.getElementById("consumptionMode"),
+      consumptionPer: document.getElementById("consumptionPer"),
+      batteryHourlyBlock: document.getElementById("batteryHourlyBlock"),
+      batteryWindowsBlock: document.getElementById("batteryWindowsBlock"),
+      windowRowsContainer: document.getElementById("windowRowsContainer"),
+      hourlyConsumptionGrid: document.getElementById("hourlyConsumptionGrid"),
+      addWindowButton: document.getElementById("addWindowButton"),
+      batteryResetButton: document.getElementById("batteryResetButton")
     };
 
+    let favorites = loadFavorites();
+    let activeFavoriteId = null;
     let dailyChart = null;
-    let hourlyChart = null;
+    let cumulativeChart = null;
     let marker = null;
-    const map = L.map('map').setView([40.7128, -74.006], 5);
+    let locationAccuracyCircle = null;
+    let hourlyCharts = [];
+    let forecastRequestId = 0;
+    let nextWindowId = 2;
 
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
+    const batteryColors = {
+      charge: "#79d4ff",
+      consume: "#f5a623",
+      unused: "#8b95a7",
+      shortfall: "#ff7b72",
+      batteryLine: "#6ee7b7"
+    };
+
+    const map = L.map("map").setView([40.7128, -74.0060], 5);
+
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19
     }).addTo(map);
 
-    marker = L.marker([40.7128, -74.006]).addTo(map);
-
-    function setStatus(message, isError = false) {
-      elements.status.textContent = message;
-      elements.status.style.color = isError ? '#ff7b72' : '#9da7b3';
+    function setLocationAccuracyText(text) {
+      elements.locationAccuracy.textContent = text || "";
     }
 
+    function clearLocationAccuracyCircle() {
+      if (locationAccuracyCircle) {
+        map.removeLayer(locationAccuracyCircle);
+        locationAccuracyCircle = null;
+      }
+    }
+
+    function loadFavorites() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        return Array.isArray(saved) ? saved : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveFavoritesToStorage() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(favorites));
+    }
+
+    function makeId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
+
     function setSidebarOpen(open) {
-      const isOpen = Boolean(open);
-      document.body.classList.toggle('sidebar-open', isOpen);
-      elements.sidebar.classList.toggle('collapsed', !isOpen);
-      elements.menuToggle.setAttribute('aria-expanded', String(isOpen));
-      elements.menuToggle.setAttribute('aria-label', isOpen ? 'Collapse settings' : 'Open settings');
+      elements.sidebar.classList.toggle("collapsed", !open);
+      document.body.classList.toggle("sidebar-open", open);
+      elements.menuToggle.setAttribute("aria-expanded", String(open));
+      elements.menuToggle.setAttribute("aria-label", open ? "Collapse favorites menu" : "Open favorites menu");
       setTimeout(() => map.invalidateSize(), 220);
     }
 
-    function populateTimeSelects() {
-      const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-      const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
-      elements.loadStartHour.innerHTML = hours.map((h) => `<option value="${h}">${h}</option>`).join('');
-      elements.loadEndHour.innerHTML = hours.map((h) => `<option value="${h}">${h}</option>`).join('');
-      elements.loadStartMinute.innerHTML = minutes.map((m) => `<option value="${m}">${m}</option>`).join('');
-      elements.loadEndMinute.innerHTML = minutes.map((m) => `<option value="${m}">${m}</option>`).join('');
-      elements.loadStartHour.value = '08';
-      elements.loadStartMinute.value = '00';
-      elements.loadEndHour.value = '18';
-      elements.loadEndMinute.value = '00';
+    elements.menuToggle.addEventListener("click", () => {
+      setSidebarOpen(elements.sidebar.classList.contains("collapsed"));
+    });
+
+    function updateSelectedNameDisplay() {
+      elements.nameDisplay.textContent = elements.name.value.trim();
     }
 
-    function buildPerHourInputs() {
-      const rows = Array.from({ length: 24 }, (_, hour) => {
-        const timeLabel = `${String(hour).padStart(2, '0')}:00`;
-        return `
-          <div class="per-hour-row">
-            <label>${timeLabel}</label>
-            <input type="number" min="0" step="0.1" value="0" data-hour="${hour}" aria-label="Custom load for ${timeLabel}" />
-          </div>
-        `;
-      }).join('');
-      elements.perHourWrap.innerHTML = rows;
-    }
+    elements.name.addEventListener("input", updateSelectedNameDisplay);
 
-    function updateLoadFieldVisibility() {
-      const enabled = elements.batteryModeEnabled.checked;
-      if (!enabled) {
-        elements.timeWindowWrap.classList.add('hidden');
-        elements.perHourWrap.classList.add('hidden');
-        return;
-      }
-
-      const mode = elements.loadMode.value;
-      elements.timeWindowWrap.classList.toggle('hidden', mode !== 'time-window');
-      elements.perHourWrap.classList.toggle('hidden', mode !== 'per-hour');
-    }
-
-    function getLoadSettings() {
-      const loadValue = Number(elements.loadValue.value) || 0;
-      const loadKw = elements.loadUnit.value === 'kw' ? loadValue * 1000 : loadValue;
-
-      const timeWindow = {
-        startHour: Number(elements.loadStartHour.value),
-        startMinute: Number(elements.loadStartMinute.value),
-        endHour: Number(elements.loadEndHour.value),
-        endMinute: Number(elements.loadEndMinute.value)
-      };
-
-      const perHour = Array.from({ length: 24 }, (_, hour) => {
-        const input = elements.perHourWrap.querySelector(`input[data-hour="${hour}"]`);
-        return Number((input && input.value) || 0);
+    function setFavoriteParameterStyle(selected) {
+      document.querySelectorAll(".parameter-input").forEach((input) => {
+        input.classList.toggle("favorite-selected", selected);
       });
+    }
 
+    function clearFavoriteSelection(clearName = true) {
+      activeFavoriteId = null;
+      setFavoriteParameterStyle(false);
+      if (clearName) {
+        elements.name.value = "";
+        updateSelectedNameDisplay();
+      }
+    }
+
+    function getSettings() {
       return {
-        loadKw,
-        mode: elements.loadMode.value,
-        batteryMode: elements.batteryModeEnabled.checked,
-        timeWindow,
-        perHour
+        latitude: Number(elements.latitude.value),
+        longitude: Number(elements.longitude.value),
+        tilt: Number(elements.tilt.value),
+        azimuth: Number(elements.azimuth.value),
+        peakPower: Number(elements.peakPower.value),
+        lossPercent: Number(elements.lossPercent.value)
       };
     }
 
-    function minutesFromTime(hour, minute = 0) {
-      return hour * 60 + minute;
+    function settingsAreValid(settings) {
+      return Number.isFinite(settings.latitude) && settings.latitude >= -90 && settings.latitude <= 90 &&
+        Number.isFinite(settings.longitude) && settings.longitude >= -180 && settings.longitude <= 180 &&
+        Number.isFinite(settings.tilt) && settings.tilt >= 0 && settings.tilt <= 90 &&
+        Number.isFinite(settings.azimuth) && settings.azimuth >= -180 && settings.azimuth <= 180 &&
+        Number.isFinite(settings.peakPower) && settings.peakPower > 0 &&
+        Number.isFinite(settings.lossPercent) && settings.lossPercent >= 0 && settings.lossPercent <= 100;
     }
 
-    function getLoadForHour(date, settings) {
-      const hour = date.getHours();
-      if (!settings.batteryMode) return 0;
-      if (settings.mode === 'constant-day') return settings.loadKw;
-      if (settings.mode === 'time-window') {
-        const start = minutesFromTime(settings.timeWindow.startHour, settings.timeWindow.startMinute);
-        const end = minutesFromTime(settings.timeWindow.endHour, settings.timeWindow.endMinute);
-        const now = minutesFromTime(date.getHours(), date.getMinutes());
-        const active = start <= end ? (now >= start && now < end) : (now >= start || now < end);
-        return active ? settings.loadKw : 0;
+    function wattToKwh(value, unit) {
+      const number = Number(value || 0);
+      if (!Number.isFinite(number)) return 0;
+      if (unit === "kw") return number;
+      return number / 1000;
+    }
+
+    function convertCapacityToKwh(value, unit) {
+      const n = Number(value || 0);
+      if (!Number.isFinite(n) || n <= 0) return 0;
+      switch (unit) {
+        case "ah12.8": return (n * 12.8) / 1000;
+        case "ah25.6": return (n * 25.6) / 1000;
+        case "ah51.2": return (n * 51.2) / 1000;
+        default: return n;
       }
-      if (settings.mode === 'per-hour') {
-        return (settings.perHour[hour] || 0) * 1000;
-      }
+    }
+
+    function convertLevelToKwh(value, unit, capacityKwh) {
+      const n = Number(value || 0);
+      if (!Number.isFinite(n)) return 0;
+      if (unit === "percent") return capacityKwh * (n / 100);
+      if (unit === "kwh") return n;
+      if (unit === "ah12.8") return (n * 12.8) / 1000;
+      if (unit === "ah25.6") return (n * 25.6) / 1000;
+      if (unit === "ah51.2") return (n * 51.2) / 1000;
       return 0;
     }
 
-    function getSolarGeometry(lat, lon, date) {
-      const rad = (deg) => (deg * Math.PI) / 180;
-      const deg = (radValue) => (radValue * 180) / Math.PI;
-      const dayOfYear = Math.floor((Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) - Date.UTC(date.getFullYear(), 0, 0)) / 86400000);
-      const declination = 23.45 * Math.sin(rad((360 / 365) * (dayOfYear - 81)));
-      const hourAngle = rad((date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600 - 12) * 15);
-      const latRad = rad(lat);
+    function convertKwhToDisplay(kwh, unit, capacityKwh) {
+      const n = Number(kwh || 0);
+      if (!Number.isFinite(n)) return 0;
+      if (unit === "percent") return capacityKwh > 0 ? (n / capacityKwh) * 100 : 0;
+      if (unit === "kwh") return n;
+      if (unit === "ah12.8") return (n * 1000) / 12.8;
+      if (unit === "ah25.6") return (n * 1000) / 25.6;
+      if (unit === "ah51.2") return (n * 1000) / 51.2;
+      return n;
+    }
 
-      const sunAltitude = Math.asin(
-        Math.sin(latRad) * Math.sin(rad(declination)) +
-        Math.cos(latRad) * Math.cos(rad(declination)) * Math.cos(hourAngle)
-      );
+    function makeBatteryFavoriteValue(battery) {
+      if (!battery || !battery.batteryMode) return null;
+      const value = { ...battery };
+      delete value.batteryLevelValue;
+      delete value.batteryLevelUnit;
+      delete value.graphUnit;
+      return value;
+    }
 
-      const sunAzimuth = Math.atan2(
-        Math.sin(hourAngle),
-        Math.cos(hourAngle) * Math.sin(latRad) - Math.tan(rad(declination)) * Math.cos(latRad)
-      );
-
-      const panelTilt = rad(Number(elements.panelTilt.value || 0));
-      const panelAzimuth = rad(Number(elements.panelAzimuth.value || 0));
-      const angle = Math.max(0, Math.sin(sunAltitude) * Math.cos(panelTilt) +
-        Math.cos(sunAltitude) * Math.sin(panelTilt) * Math.cos(sunAzimuth(sunAzimuth, panelAzimuth)));
-
+    function getBatterySettings() {
       return {
-        sunAltitude,
-        sunAzimuth,
-        panelTilt,
-        panelAzimuth,
-        incidenceFactor: angle
+        batteryMode: elements.batteryModeEnabled.checked,
+        batteryCapacity: Number(elements.batteryCapacityInput.value),
+        batteryCapacityUnit: elements.batteryCapacityUnit.value,
+        batteryMinLevel: Number(elements.batteryMinLevel.value),
+        batteryLevelValue: Number(elements.batteryLevelInput.value),
+        batteryLevelUnit: elements.batteryLevelUnit.value,
+        graphUnit: elements.batteryGraphUnit.value,
+        consumptionMode: elements.consumptionMode.value,
+        consumptionValue: Number(elements.consumptionValue.value),
+        consumptionUnit: elements.consumptionUnit.value,
+        consumptionPer: elements.consumptionPer.value,
+        timeWindows: getTimeWindows(),
+        hourlyConsumption: getHourlyConsumptionArray()
       };
     }
 
-    function sunAzimuthToDegrees(value) {
-      const degValue = deg(value);
-      return (degValue + 360) % 360;
+    function getTimeWindows() {
+      const rows = elements.windowRowsContainer.querySelectorAll(".battery-window-row");
+      const result = [];
+      rows.forEach((row) => {
+        const start = row.querySelector("[data-role='start']")?.value;
+        const end = row.querySelector("[data-role='end']")?.value;
+        const value = Number(row.querySelector("[data-role='value']")?.value || 0);
+        if (start && end) result.push({ id: Number(row.dataset.windowId || Date.now()), start, end, value });
+      });
+      return result;
     }
 
-    function getSolarProductionForHour(date, irradianceWm2, lat, lon) {
-      const panelTilt = Number(elements.panelTilt.value || 0);
-      const azimuth = Number(elements.panelAzimuth.value || 0);
-      const peakPowerKw = Number(elements.peakPower.value || 0);
-      const lossPercent = Number(elements.lossPercent.value || 0) / 100;
-
-      const panelArea = (peakPowerKw * 1000) / 1000; // rough area proxy, in m²
-      const geometry = getSolarGeometry(lat, lon, date);
-      const incidenceFactor = Math.max(0, geometry.incidenceFactor || 0);
-      const netIrradiance = irradianceWm2 * incidenceFactor;
-      const generationKw = (netIrradiance * panelArea * (1 - lossPercent)) / 1000;
-      return Math.max(0, generationKw);
+    function getHourlyConsumptionArray() {
+      const values = [];
+      elements.hourlyConsumptionGrid.querySelectorAll("input").forEach((input) => {
+        const hour = Number(input.id.replace("hour-", ""));
+        values[hour] = { hour, value: Number(input.value || 0) };
+      });
+      return values.filter(Boolean);
     }
 
-    function parseFloatSafe(value) {
-      const num = Number(value);
-      return Number.isFinite(num) ? num : 0;
+    function buildDefaultHourlyProfile() {
+      return Array.from({ length: 24 }, (_, hour) => ({ hour, value: hour >= 8 && hour <= 18 ? 1500 : 0 }));
     }
 
-    async function fetchForecast() {
-      const lat = Number(elements.latitude.value);
-      const lon = Number(elements.longitude.value);
+    function createHourlyField(hour, value) {
+      const wrap = document.createElement("div");
+      wrap.className = "field";
+      const label = document.createElement("label");
+      label.textContent = `${String(hour).padStart(2, "0")}:00`;
+      label.setAttribute("for", `hour-${hour}`);
+      const input = document.createElement("input");
+      input.id = `hour-${hour}`;
+      input.type = "number";
+      input.step = "1";
+      input.min = "0";
+      input.value = Number(value || 0).toFixed(0);
+      wrap.appendChild(label);
+      wrap.appendChild(input);
+      return wrap;
+    }
 
-      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-        setStatus('Latitude and longitude must be valid numbers.', true);
-        return null;
+    function renderHourlyProfile(values) {
+      elements.hourlyConsumptionGrid.replaceChildren();
+      values.forEach((entry) => {
+        elements.hourlyConsumptionGrid.appendChild(createHourlyField(entry.hour, entry.value));
+      });
+    }
+
+    function setDefaultProfiles() {
+      restoreTimeWindows([{ id: 1, start: "08:00", end: "18:00", value: 1200 }]);
+      restoreHourlyProfile(buildDefaultHourlyProfile());
+    }
+
+    function restoreTimeWindows(windows) {
+      elements.windowRowsContainer.replaceChildren();
+      if (!windows || !windows.length) {
+        addWindowRow({ id: 1, start: "08:00", end: "18:00", value: 1200 });
+        return;
+      }
+      windows.forEach((rowInfo) => addWindowRow(rowInfo));
+    }
+
+    function addWindowRow(windowInfo = { id: nextWindowId++, start: "08:00", end: "18:00", value: 1200 }) {
+      const row = document.createElement("div");
+      row.className = "battery-window-row";
+      row.dataset.windowId = String(windowInfo.id || nextWindowId++);
+
+      const start = document.createElement("input");
+      start.type = "time";
+      start.value = windowInfo.start || "08:00";
+      start.dataset.role = "start";
+      const end = document.createElement("input");
+      end.type = "time";
+      end.value = windowInfo.end || "18:00";
+      end.dataset.role = "end";
+      const value = document.createElement("input");
+      value.type = "number";
+      value.min = "0";
+      value.step = "1";
+      value.value = String(windowInfo.value ?? 1200);
+      value.dataset.role = "value";
+
+      const action = document.createElement("button");
+      action.type = "button";
+      action.className = "mini-button";
+      action.textContent = "Remove";
+      action.addEventListener("click", () => row.remove());
+
+      const startField = document.createElement("div");
+      startField.className = "field";
+      const startLabel = document.createElement("label");
+      startLabel.textContent = "Start";
+      startField.appendChild(startLabel);
+      startField.appendChild(start);
+
+      const endField = document.createElement("div");
+      endField.className = "field";
+      const endLabel = document.createElement("label");
+      endLabel.textContent = "End";
+      endField.appendChild(endLabel);
+      endField.appendChild(end);
+
+      const valueField = document.createElement("div");
+      valueField.className = "field";
+      const valueLabel = document.createElement("label");
+      valueLabel.textContent = "Consumption";
+      valueField.appendChild(valueLabel);
+      valueField.appendChild(value);
+
+      row.append(startField, endField, valueField, action);
+      elements.windowRowsContainer.appendChild(row);
+    }
+
+    function restoreHourlyProfile(values) {
+      const normalized = Array.from({ length: 24 }, (_, hour) => ({
+        hour,
+        value: Number((values && values[hour] && values[hour].value) || 0)
+      }));
+      renderHourlyProfile(normalized);
+    }
+
+    function loadBatteryInputsFromFavorite(favorite) {
+      const battery = favorite.battery || {};
+      elements.batteryModeEnabled.checked = !!battery.batteryMode;
+      elements.batteryCapacityInput.value = battery.batteryCapacity ?? 5;
+      elements.batteryCapacityUnit.value = battery.batteryCapacityUnit || "kwh";
+      elements.batteryMinLevel.value = battery.batteryMinLevel ?? 20;
+      elements.batteryLevelInput.value = battery.batteryLevelValue ?? 80;
+      elements.batteryLevelUnit.value = battery.batteryLevelUnit || "percent";
+      elements.batteryGraphUnit.value = battery.graphUnit || "percent";
+      elements.consumptionMode.value = battery.consumptionMode || "constant-day";
+      elements.consumptionValue.value = battery.consumptionValue ?? 1500;
+      elements.consumptionUnit.value = battery.consumptionUnit || "w";
+      elements.consumptionPer.value = battery.consumptionPer || "hour";
+
+      if (Array.isArray(battery.timeWindows) && battery.timeWindows.length) restoreTimeWindows(battery.timeWindows);
+      else setDefaultProfiles();
+
+      if (Array.isArray(battery.hourlyConsumption) && battery.hourlyConsumption.length) restoreHourlyProfile(battery.hourlyConsumption);
+      else restoreHourlyProfile(buildDefaultHourlyProfile());
+
+      syncBatteryUi();
+    }
+
+    function syncBatteryUi() {
+      const enabled = elements.batteryModeEnabled.checked;
+      elements.batterySettingsBlock.style.display = enabled ? "grid" : "none";
+      elements.batteryDynamicBlock.style.display = enabled ? "grid" : "none";
+      elements.batteryWindowsBlock.style.display = enabled && elements.consumptionMode.value === "windows" ? "grid" : "none";
+      elements.batteryHourlyBlock.style.display = enabled && elements.consumptionMode.value === "hourly" ? "grid" : "none";
+    }
+
+    elements.batteryModeEnabled.addEventListener("change", syncBatteryUi);
+    elements.consumptionMode.addEventListener("change", syncBatteryUi);
+    elements.addWindowButton.addEventListener("click", () => addWindowRow());
+    elements.batteryResetButton.addEventListener("click", () => {
+      elements.consumptionMode.value = "constant-day";
+      elements.consumptionValue.value = 1500;
+      elements.consumptionUnit.value = "w";
+      elements.consumptionPer.value = "hour";
+      setDefaultProfiles();
+      restoreHourlyProfile(buildDefaultHourlyProfile());
+      syncBatteryUi();
+    });
+
+    function renderFavorites() {
+      elements.favoriteList.replaceChildren();
+      elements.noFavorites.hidden = favorites.length > 0;
+
+      favorites.forEach((favorite) => {
+        const row = document.createElement("div");
+        row.className = "favorite-row";
+
+        const loadButton = document.createElement("button");
+        loadButton.type = "button";
+        loadButton.className = "favorite-button";
+        loadButton.textContent = favorite.name;
+        loadButton.title = favorite.name;
+        loadButton.addEventListener("click", () => selectFavorite(favorite));
+
+        const modifyButton = document.createElement("button");
+        modifyButton.type = "button";
+        modifyButton.className = "favorite-action-button";
+        modifyButton.innerHTML = "✏️";
+        modifyButton.title = "Modify " + favorite.name;
+        modifyButton.setAttribute("aria-label", "Modify " + favorite.name);
+        modifyButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          loadFavoriteForEditing(favorite);
+        });
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "favorite-delete-button";
+        deleteButton.innerHTML = "🗑️";
+        deleteButton.title = "Delete " + favorite.name;
+        deleteButton.setAttribute("aria-label", "Delete " + favorite.name);
+        deleteButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const confirmed = window.confirm(`Delete favorite “${favorite.name}”?`);
+          if (!confirmed) return;
+          favorites = favorites.filter((item) => item.id !== favorite.id);
+          if (activeFavoriteId === favorite.id) clearFavoriteSelection(true);
+          saveFavoritesToStorage();
+          renderFavorites();
+        });
+
+        row.append(loadButton, modifyButton, deleteButton);
+        elements.favoriteList.appendChild(row);
+      });
+    }
+
+    function loadFavoriteForEditing(favorite) {
+      activeFavoriteId = favorite.id;
+      elements.name.value = favorite.name;
+      elements.latitude.value = favorite.latitude;
+      elements.longitude.value = favorite.longitude;
+      elements.tilt.value = favorite.tilt;
+      elements.azimuth.value = favorite.azimuth;
+      elements.peakPower.value = favorite.peakPower;
+      elements.lossPercent.value = favorite.lossPercent ?? 14;
+
+      if (favorite.battery) loadBatteryInputsFromFavorite(favorite);
+      else {
+        elements.batteryModeEnabled.checked = false;
+        elements.batteryCapacityInput.value = 5;
+        elements.batteryCapacityUnit.value = "kwh";
+        elements.batteryMinLevel.value = 20;
+        elements.batteryLevelInput.value = 80;
+        elements.batteryLevelUnit.value = "percent";
+        elements.batteryGraphUnit.value = "percent";
+        elements.consumptionMode.value = "constant-day";
+        elements.consumptionValue.value = 1500;
+        elements.consumptionUnit.value = "w";
+        elements.consumptionPer.value = "hour";
+        setDefaultProfiles();
+        restoreHourlyProfile(buildDefaultHourlyProfile());
       }
 
-      const params = new URLSearchParams({
-        latitude: String(lat),
-        longitude: String(lon),
-        hourly: 'shortwave_radiation',
-        forecast_days: '16',
-        timezone: 'auto'
-      });
+      syncBatteryUi();
+      setLocationAccuracyText("");
+      clearLocationAccuracyCircle();
+      updateSelectedNameDisplay();
+      setFavoriteParameterStyle(true);
 
-      const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
-      setStatus('Loading forecast from Open-Meteo...');
+      const latitude = Number(favorite.latitude);
+      const longitude = Number(favorite.longitude);
+      if (Number.isFinite(latitude) && Number.isFinite(longitude)) setMapLocation(latitude, longitude, 8);
+      setSidebarOpen(false);
+    }
+
+    async function selectFavorite(favorite) {
+      loadFavoriteForEditing(favorite);
+      const forecastPromise = fetchForecast();
+      requestAnimationFrame(() => {
+        document.getElementById("forecast").scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      await forecastPromise;
+    }
+
+    function setMapLocation(latitude, longitude, zoom = 9, accuracyMeters = null) {
+      map.setView([latitude, longitude], zoom);
+      if (marker) marker.setLatLng([latitude, longitude]);
+      else marker = L.marker([latitude, longitude]).addTo(map);
+
+      if (accuracyMeters != null && Number.isFinite(accuracyMeters) && accuracyMeters >= 0) {
+        clearLocationAccuracyCircle();
+        locationAccuracyCircle = L.circle([latitude, longitude], {
+          radius: accuracyMeters,
+          color: "#58a6ff",
+          fillColor: "#58a6ff",
+          fillOpacity: 0.14,
+          weight: 1
+        }).addTo(map);
+      } else {
+        clearLocationAccuracyCircle();
+      }
+    }
+
+    async function reverseGeocodeLocation(latitude, longitude) {
+      try {
+        const url = new URL("https://nominatim.openstreetmap.org/reverse");
+        url.searchParams.set("format", "jsonv2");
+        url.searchParams.set("lat", String(latitude));
+        url.searchParams.set("lon", String(longitude));
+        url.searchParams.set("zoom", "10");
+        url.searchParams.set("addressdetails", "1");
+        const response = await fetch(url, { headers: { "Accept-Language": "en" } });
+        if (!response.ok) return null;
+        const data = await response.json();
+        const address = data.address || {};
+        const parts = [address.city, address.town, address.village, address.municipality, address.county, address.state, address.country].filter(Boolean);
+        return parts.length ? parts.join(", ") : data.display_name || null;
+      } catch {
+        return null;
+      }
+    }
+
+    function useDeviceLocation() {
+      if (!navigator.geolocation) {
+        elements.locationStatus.classList.add("error");
+        elements.locationStatus.textContent = "Geolocation is not supported by this browser.";
+        setLocationAccuracyText("");
+        return;
+      }
+
+      elements.locationStatus.classList.remove("error");
+      elements.locationStatus.textContent = "Getting your location…";
+      setLocationAccuracyText("");
+
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const latitude = position.coords.latitude;
+          const longitude = position.coords.longitude;
+          const accuracyMeters = position.coords.accuracy;
+          elements.latitude.value = latitude.toFixed(6);
+          elements.longitude.value = longitude.toFixed(6);
+          clearFavoriteSelection(true);
+          setMapLocation(latitude, longitude, 12, accuracyMeters);
+
+          const placeName = await reverseGeocodeLocation(latitude, longitude);
+          if (placeName) {
+            elements.name.value = placeName;
+            updateSelectedNameDisplay();
+          }
+
+          setLocationAccuracyText(`Location accuracy: ±${Math.round(accuracyMeters)} m`);
+          elements.locationStatus.textContent = `Using device location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+        },
+        () => {
+          elements.locationStatus.classList.add("error");
+          elements.locationStatus.textContent = "Could not access your device location. Please allow location access.";
+          setLocationAccuracyText("");
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+      );
+    }
+
+    map.on("click", (event) => {
+      const { lat, lng } = event.latlng;
+      elements.latitude.value = lat.toFixed(6);
+      elements.longitude.value = lng.toFixed(6);
+      setMapLocation(lat, lng, map.getZoom());
+      clearFavoriteSelection(true);
+      setLocationAccuracyText("");
+      elements.locationStatus.textContent = `Selected coordinates: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    });
+
+    async function searchPlace() {
+      const query = elements.placeSearch.value.trim();
+      if (!query) {
+        elements.locationStatus.textContent = "Enter a place name to search.";
+        setLocationAccuracyText("");
+        return;
+      }
+
+      elements.locationStatus.classList.remove("error");
+      elements.locationStatus.textContent = "Searching…";
+      setLocationAccuracyText("");
 
       try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('Open-Meteo request failed');
-        const data = await res.json();
-        if (!data.hourly || !Array.isArray(data.hourly.time) || !Array.isArray(data.hourly.shortwave_radiation)) {
-          throw new Error('Open-Meteo response missing hourly data');
+        const url = new URL("https://photon.komoot.io/api/");
+        url.searchParams.set("q", query);
+        url.searchParams.set("limit", "5");
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Place search failed.");
+        const data = await response.json();
+        const place = data.features?.[0];
+        if (!place) {
+          elements.locationStatus.textContent = "No matching place found.";
+          return;
         }
-        return data;
+
+        const [longitude, latitude] = place.geometry.coordinates;
+        const props = place.properties || {};
+        const placeName = [props.name, props.city, props.state, props.country].filter(Boolean).filter((value, index, array) => array.indexOf(value) === index).join(", ") || query;
+
+        elements.latitude.value = Number(latitude).toFixed(6);
+        elements.longitude.value = Number(longitude).toFixed(6);
+        elements.name.value = placeName;
+        clearFavoriteSelection(false);
+        updateSelectedNameDisplay();
+        setMapLocation(Number(latitude), Number(longitude), 10);
+        elements.locationStatus.textContent = `Selected: ${placeName}`;
       } catch (error) {
-        setStatus(error.message || 'Forecast failed', true);
-        return null;
+        elements.locationStatus.classList.add("error");
+        elements.locationStatus.textContent = "Could not search for that place. Check your connection and try again.";
       }
     }
 
-    function buildForecastRows(data) {
-      const lat = Number(elements.latitude.value);
-      const lon = Number(elements.longitude.value);
-      const settings = getLoadSettings();
-      const rows = [];
-      const mapByDay = new Map();
+    document.getElementById("searchButton").addEventListener("click", searchPlace);
+    elements.locateButton.addEventListener("click", useDeviceLocation);
+    elements.placeSearch.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") searchPlace();
+    });
 
-      for (let i = 0; i < data.hourly.time.length; i++) {
-        const iso = data.hourly.time[i];
-        const date = new Date(iso);
-        const irradiance = parseFloatSafe(data.hourly.shortwave_radiation[i]);
-        const production = getSolarProductionForHour(date, irradiance, lat, lon);
-        const load = getLoadForHour(date, settings);
-        const batteryDelta = Math.max(0, production - load);
-        const deficit = Math.max(0, load - production);
+    function getConsumptionProfileForHour(dateIso, batterySettings) {
+      const hour = new Date(dateIso).getHours();
+      const mode = batterySettings.consumptionMode || "constant-day";
 
-        const row = {
-          iso,
-          date,
-          hour: date.getHours(),
-          irradiance,
-          production,
-          load,
-          deficit,
-          batteryDelta,
-          batteryLevel: 0
-        };
-
-        rows.push(row);
-
-        const dayKey = iso.slice(0, 10);
-        if (!mapByDay.has(dayKey)) {
-          mapByDay.set(dayKey, {
-            day: dayKey,
-            totalProduction: 0,
-            totalLoad: 0,
-            totalDeficit: 0,
-            hours: []
-          });
-        }
-        const bucket = mapByDay.get(dayKey);
-        bucket.totalProduction += production;
-        bucket.totalLoad += load;
-        bucket.totalDeficit += deficit;
-        bucket.hours.push(row);
+      if (mode === "hourly") {
+        const profile = batterySettings.hourlyConsumption || [];
+        const match = profile.find((entry) => Number(entry.hour) === hour);
+        return wattToKwh(Number(match?.value || 0), batterySettings.consumptionUnit || "w");
       }
 
-      const daily = Array.from(mapByDay.values()).map((bucket) => ({
-        day: bucket.day,
-        totalProduction: bucket.totalProduction,
-        totalLoad: bucket.totalLoad,
-        totalDeficit: bucket.totalDeficit,
-        hours: bucket.hours
-      }));
+      if (mode === "windows") {
+        const windows = batterySettings.timeWindows || [];
+        const minutes = new Date(dateIso).getHours() * 60 + (new Date(dateIso).getMinutes() || 0);
+        for (const windowInfo of windows) {
+          const start = timeStringToMinutes(windowInfo.start);
+          const end = timeStringToMinutes(windowInfo.end);
+          const inWindow = start < end ? minutes >= start && minutes < end : minutes >= start || minutes < end;
+          if (inWindow) return wattToKwh(Number(windowInfo.value || 0), batterySettings.consumptionUnit || "w");
+        }
+        return 0;
+      }
 
-      return { rows, daily };
+      const value = Number(batterySettings.consumptionValue || 0);
+      const unit = batterySettings.consumptionUnit || "w";
+      const per = batterySettings.consumptionPer || "hour";
+      const kwhPerHourValue = wattToKwh(value, unit);
+      if (per === "day") return kwhPerHourValue / 24;
+      if (per === "week") return kwhPerHourValue / (7 * 24);
+      return kwhPerHourValue;
+    }
+
+    function timeStringToMinutes(value) {
+      const [hours, minutes] = String(value || "00:00").split(":").map(Number);
+      return (Number(hours) || 0) * 60 + (Number(minutes) || 0);
+    }
+
+    function buildBatteryStateValues(batterySettings) {
+      const capKwh = convertCapacityToKwh(Number(batterySettings.batteryCapacity || 0), batterySettings.batteryCapacityUnit || "kwh");
+      const levelKwh = convertLevelToKwh(Number(batterySettings.batteryLevelValue || 0), batterySettings.batteryLevelUnit || "percent", capKwh);
+      const minPercent = Number(batterySettings.batteryMinLevel ?? 20);
+      return {
+        capacityKwh: capKwh,
+        minLevelKwh: capKwh * (minPercent / 100),
+        currentLevelKwh: levelKwh,
+        currentLevelPercent: capKwh > 0 ? (levelKwh / capKwh) * 100 : 0
+      };
+    }
+
+    function buildHourlyProductionByDay(data, settings, batteryMode) {
+      const lossFactor = 1 - settings.lossPercent / 100;
+      const times = Array.isArray(data?.hourly?.time) ? data.hourly.time : [];
+      const irradiance = Array.isArray(data?.hourly?.global_tilted_irradiance) ? data.hourly.global_tilted_irradiance : [];
+      const byDate = new Map();
+
+      for (let index = 0; index < times.length; index++) {
+        const time = times[index];
+        const value = Number(irradiance[index]);
+        if (!Number.isFinite(value)) continue;
+        const date = time.slice(0, 10);
+        const production = Math.max(0, value * settings.peakPower * lossFactor / 1000);
+        if (!byDate.has(date)) byDate.set(date, []);
+        byDate.get(date).push({
+          time,
+          label: new Intl.DateTimeFormat(undefined, { hour: "numeric" }).format(new Date(time)),
+          production,
+          batteryCharge: 0,
+          directConsumption: 0,
+          unused: 0,
+          missing: 0,
+          batteryDischarge: 0,
+          batteryLevel: 0,
+          batteryPercent: 0,
+          batteryLevelKwh: 0
+        });
+      }
+
+      if (!batteryMode || !batteryMode.batteryMode) {
+        return [...byDate.entries()].slice(0, 16).map(([date, entries]) => ({
+          date,
+          entries: entries.filter((entry, idx, arr) => idx === 0 || idx === arr.length - 1 || entry.production > 0.0001)
+        }));
+      }
+
+      const batteryState = buildBatteryStateValues(batteryMode);
+      let currentLevelKwh = batteryState.currentLevelKwh;
+      const capacityKwh = batteryState.capacityKwh;
+
+      [...byDate.entries()].slice(0, 16).forEach(([date, entries]) => {
+        entries.forEach((entry) => {
+          const demandKwh = getConsumptionProfileForHour(entry.time, batteryMode);
+          const productionKwh = Number(entry.production || 0);
+          const directUse = Math.min(productionKwh, demandKwh);
+          const remainingAfterDirect = Math.max(0, productionKwh - directUse);
+          const freeBatterySpace = Math.max(0, capacityKwh - currentLevelKwh);
+          const chargeToBattery = Math.min(remainingAfterDirect, freeBatterySpace);
+          const unused = Math.max(0, remainingAfterDirect - chargeToBattery);
+
+          let deficit = Math.max(0, demandKwh - productionKwh);
+          let batteryDischarge = 0;
+          const usableStored = Math.max(0, currentLevelKwh - batteryState.minLevelKwh);
+          if (deficit > 0 && usableStored > 0) {
+            batteryDischarge = Math.min(deficit, usableStored);
+            deficit = Math.max(0, deficit - batteryDischarge);
+            currentLevelKwh = Math.max(batteryState.minLevelKwh, currentLevelKwh - batteryDischarge);
+          }
+
+          if (productionKwh > directUse) {
+            currentLevelKwh = Math.min(capacityKwh, currentLevelKwh + chargeToBattery);
+          }
+
+          entry.directConsumption = Number((Math.min(demandKwh, productionKwh) + batteryDischarge).toFixed(6));
+          entry.batteryCharge = Number(chargeToBattery.toFixed(6));
+          entry.unused = Number(unused.toFixed(6));
+          entry.missing = Number(deficit.toFixed(6));
+          entry.batteryDischarge = Number(batteryDischarge.toFixed(6));
+          entry.batteryLevelKwh = Number(currentLevelKwh.toFixed(6));
+          entry.batteryLevel = Number(((currentLevelKwh / (capacityKwh || 1)) * 100).toFixed(2));
+          entry.batteryPercent = Number(((currentLevelKwh / (capacityKwh || 1)) * 100).toFixed(2));
+        });
+      });
+
+      return [...byDate.entries()].slice(0, 16).map(([date, entries]) => ({ date, entries }));
+    }
+
+    function formatKwh(value) {
+      const num = Number(value || 0);
+      return `${num.toFixed(2)} kWh`;
+    }
+
+    function renderForecastTable(forecastDays) {
+      elements.forecastTable.innerHTML = "";
+      let cumulative = 0;
+      forecastDays.forEach((day) => {
+        const daily = day.entries.reduce((sum, entry) => sum + Number(entry.production || 0), 0);
+        cumulative += daily;
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${day.date}</td>
+          <td>${formatKwh(daily)}</td>
+          <td>${formatKwh(cumulative)}</td>
+        `;
+        elements.forecastTable.appendChild(row);
+      });
     }
 
     function destroyCharts() {
-      if (dailyChart) {
-        dailyChart.destroy();
-        dailyChart = null;
-      }
-      if (hourlyChart) {
-        hourlyChart.destroy();
-        hourlyChart = null;
+      hourlyCharts.forEach((chart) => chart.destroy());
+      hourlyCharts = [];
+      if (dailyChart) dailyChart.destroy();
+      if (cumulativeChart) cumulativeChart.destroy();
+    }
+
+    function getBatteryDisplayLabel(unit) {
+      switch (unit) {
+        case "kwh": return "kWh";
+        case "ah12.8": return "Ah 12.8V";
+        case "ah25.6": return "Ah 25.6V";
+        case "ah51.2": return "Ah 51.2V";
+        default: return "%";
       }
     }
 
-    function renderCharts(rows, daily) {
-      destroyCharts();
+    function renderHourlyCharts(forecastDays, batteryMode) {
+      const container = elements.hourlyChartsContainer;
+      container.innerHTML = "";
+      hourlyCharts.forEach((chart) => chart.destroy());
+      hourlyCharts = [];
 
-      const reduction = daily.map((d) => ({
-        label: d.day.slice(5),
-        production: Number(d.totalProduction.toFixed(2)),
-        deficit: Number(d.totalDeficit.toFixed(2))
-      }));
+      forecastDays.forEach((day) => {
+        const card = document.createElement("div");
+        card.className = "hourly-day-card";
 
-      dailyChart = new Chart(document.getElementById('dailyChart'), {
-        type: 'bar',
+        const total = day.entries.reduce((sum, entry) => sum + Number(entry.production || 0), 0);
+        const title = document.createElement("h3");
+        title.textContent = `${day.date} · total ${formatKwh(total)}`;
+        card.appendChild(title);
+
+        const wrap = document.createElement("div");
+        wrap.className = "hourly-chart-wrap";
+        const canvas = document.createElement("canvas");
+        wrap.appendChild(canvas);
+        card.appendChild(wrap);
+        container.appendChild(card);
+
+        const graphUnit = batteryMode && batteryMode.batteryMode ? (batteryMode.graphUnit || "percent") : "percent";
+        const capacityKwh = batteryMode ? convertCapacityToKwh(Number(batteryMode.batteryCapacity || 0), batteryMode.batteryCapacityUnit || "kwh") : 0;
+
+        const datasets = batteryMode && batteryMode.batteryMode ? [
+          {
+            label: "Battery charge",
+            data: day.entries.map((entry) => Number(entry.batteryCharge || 0)),
+            backgroundColor: batteryColors.charge,
+            borderRadius: 4,
+            stack: "solar"
+          },
+          {
+            label: "Real-time consumption",
+            data: day.entries.map((entry) => Number(entry.directConsumption || 0)),
+            backgroundColor: batteryColors.consume,
+            borderRadius: 4,
+            stack: "solar"
+          },
+          {
+            label: "Unused",
+            data: day.entries.map((entry) => Number(entry.unused || 0)),
+            backgroundColor: batteryColors.unused,
+            borderRadius: 4,
+            stack: "solar"
+          },
+          {
+            label: "Battery",
+            data: day.entries.map((entry) => Number(convertKwhToDisplay(entry.batteryLevelKwh || 0, graphUnit, capacityKwh))),
+            borderColor: batteryColors.batteryLine,
+            backgroundColor: "rgba(110,231,183,0.15)",
+            yAxisID: "y1",
+            type: "line",
+            tension: 0.3,
+            pointRadius: 0,
+            fill: false
+          }
+        ] : [
+          {
+            label: "Production",
+            data: day.entries.map((entry) => Number(entry.production || 0)),
+            backgroundColor: "#f0b429",
+            borderRadius: 4,
+            borderSkipped: false
+          }
+        ];
+
+        const chart = new Chart(canvas, {
+          type: "bar",
+          data: { labels: day.entries.map((entry) => entry.label), datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            scales: batteryMode && batteryMode.batteryMode ? {
+              x: { stacked: true, ticks: { maxTicksLimit: 8 } },
+              y: { stacked: true, beginAtZero: true, title: { display: true, text: "kWh" } },
+              y1: {
+                position: "right",
+                beginAtZero: false,
+                grid: { drawOnChartArea: false },
+                title: { display: true, text: getBatteryDisplayLabel(graphUnit) }
+              }
+            } : {
+              x: { ticks: { maxTicksLimit: 8 } },
+              y: { beginAtZero: true, title: { display: true, text: "kWh" } }
+            },
+            plugins: {
+              legend: { display: true },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => `${ctx.dataset.label}: ${Number(ctx.parsed.y || 0).toFixed(2)} ${ctx.dataset.label === "Battery" ? getBatteryDisplayLabel(graphUnit) : "kWh"}`
+                }
+              }
+            }
+          }
+        });
+
+        hourlyCharts.push(chart);
+      });
+    }
+
+    function renderDailyCharts(dailyValues, batteryMode) {
+      const labels = dailyValues.map((entry) => entry.date);
+      const production = dailyValues.map((entry) => Number(entry.total || 0));
+      const cumulative = dailyValues.map((entry) => Number(entry.cum || 0));
+      const batterySeries = batteryMode && batteryMode.batteryMode ? dailyValues.map((entry) => Number(entry.batteryPercent || 0)) : [];
+
+      if (dailyChart) dailyChart.destroy();
+      if (cumulativeChart) cumulativeChart.destroy();
+
+      const dailyCtx = document.getElementById("dailyChart");
+      dailyChart = new Chart(dailyCtx, {
+        type: "bar",
         data: {
-          labels: reduction.map((d) => d.label),
+          labels,
           datasets: [
             {
-              label: 'Production',
-              data: reduction.map((d) => d.production),
-              backgroundColor: '#79d4ff',
+              label: "Daily energy",
+              data: production,
+              backgroundColor: "#f0b429",
               borderRadius: 4,
               borderSkipped: false,
+              yAxisID: "y"
             },
-            {
-              label: 'Deficit',
-              data: reduction.map((d) => -Math.max(0, d.deficit)),
-              backgroundColor: '#ff7b72',
-              borderRadius: 4,
-              borderSkipped: false,
-            }
+            ...(batteryMode && batteryMode.batteryMode ? [{
+              label: "Battery level",
+              data: batterySeries,
+              type: "line",
+              borderColor: "#6ee7b7",
+              backgroundColor: "rgba(110,231,183,0.15)",
+              pointRadius: 2,
+              tension: 0.3,
+              yAxisID: "y1"
+            }] : [])
           ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          animation: false,
-          scales: {
-            y: {
+          plugins: { legend: { display: true } },
+          scales: batteryMode && batteryMode.batteryMode ? {
+            x: { ticks: { maxTicksLimit: 8 } },
+            y: { beginAtZero: true, title: { display: true, text: "kWh" } },
+            y1: {
+              position: "right",
               beginAtZero: false,
-              grid: { color: 'rgba(255,255,255,0.08)' }
+              min: 0,
+              max: 100,
+              grid: { drawOnChartArea: false },
+              title: { display: true, text: "Battery %" }
             }
-          },
-          plugins: {
-            legend: { display: true }
+          } : {
+            x: { ticks: { maxTicksLimit: 8 } },
+            y: { beginAtZero: true, title: { display: true, text: "kWh" } }
           }
         }
       });
 
-      const hourlySeries = rows.slice(-24).map((row) => ({
-        label: row.date.getHours() + ':00',
-        production: Number(row.production.toFixed(2)),
-        deficit: Number(Math.max(0, row.deficit).toFixed(2))
-      }));
-
-      hourlyChart = new Chart(document.getElementById('hourlyChart'), {
-        type: 'bar',
+      const cumulativeCtx = document.getElementById("cumulativeChart");
+      cumulativeChart = new Chart(cumulativeCtx, {
+        type: "line",
         data: {
-          labels: hourlySeries.map((d) => d.label),
-          datasets: [
-            {
-              label: 'Production',
-              data: hourlySeries.map((d) => d.production),
-              backgroundColor: '#79d4ff',
-              borderRadius: 4,
-              borderSkipped: false,
-            },
-            {
-              label: 'Deficit',
-              data: hourlySeries.map((d) => -d.deficit),
-              backgroundColor: '#ff7b72',
-              borderRadius: 4,
-              borderSkipped: false,
-            }
-          ]
+          labels,
+          datasets: [{
+            label: "Cumulative energy",
+            data: cumulative,
+            borderColor: "#6ee7b7",
+            backgroundColor: "rgba(110, 231, 183, 0.15)",
+            fill: true,
+            tension: 0.3
+          }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          animation: false,
+          plugins: { legend: { display: false } },
           scales: {
-            y: {
-              beginAtZero: false,
-              grid: { color: 'rgba(255,255,255,0.08)' }
-            }
-          },
-          plugins: {
-            legend: { display: true }
+            y: { beginAtZero: true, title: { display: true, text: "kWh" } }
           }
         }
       });
     }
 
-    async function runForecast() {
-      const data = await fetchForecast();
-      if (!data) return;
-
-      const forecast = buildForecastRows(data);
-      const totalProduction = forecast.rows.reduce((sum, row) => sum + row.production, 0);
-      setStatus(`Forecast loaded. Total production: ${totalProduction.toFixed(2)} kW`);
-      renderCharts(forecast.rows, forecast.daily);
-
-      const lat = Number(elements.latitude.value);
-      const lon = Number(elements.longitude.value);
-      marker.setLatLng([lat, lon]);
-      map.setView([lat, lon], 7);
-    }
-
-    function bindEvents() {
-      elements.menuToggle.addEventListener('click', (event) => {
-        event.stopPropagation();
-        setSidebarOpen(!document.body.classList.contains('sidebar-open'));
+    function buildDailySummary(forecastDays, batteryMode) {
+      let total = 0;
+      const dailyValues = forecastDays.map((day) => {
+        const totalDay = day.entries.reduce((sum, entry) => sum + Number(entry.production || 0), 0);
+        total += totalDay;
+        return { date: day.date, total: totalDay, cum: total, batteryPercent: batteryMode && batteryMode.batteryMode ? Number((day.entries.reduce((sum, entry) => sum + Number(entry.batteryPercent || 0), 0) / Math.max(1, day.entries.length)).toFixed(2)) : 0 };
       });
 
-      document.addEventListener('click', (event) => {
-        const clickedSidebar = elements.sidebar.contains(event.target);
-        const clickedToggle = elements.menuToggle.contains(event.target);
-        const clickedInsideMap = event.target.closest('#map') || event.target.closest('.leaflet-control');
-        const sidebarOpen = document.body.classList.contains('sidebar-open');
-
-        if (!clickedSidebar && !clickedToggle && !clickedInsideMap && sidebarOpen) {
-          setSidebarOpen(false);
-        }
-      });
-
-      elements.batteryModeEnabled.addEventListener('change', updateLoadFieldVisibility);
-      elements.loadMode.addEventListener('change', updateLoadFieldVisibility);
-      elements.forecastButton.addEventListener('click', runForecast);
-      elements.latitude.addEventListener('change', () => marker.setLatLng([Number(elements.latitude.value), Number(elements.longitude.value)]));
-      elements.longitude.addEventListener('change', () => marker.setLatLng([Number(elements.latitude.value), Number(elements.longitude.value)]));
-      elements.batteryModeEnabled.addEventListener('change', updateLoadFieldVisibility);
+      elements.periodSummary.textContent = `${forecastDays[0]?.date || "—"} → ${forecastDays[forecastDays.length - 1]?.date || "—"}`;
+      elements.totalSummary.textContent = formatKwh(total);
+      elements.averageSummary.textContent = formatKwh(total / Math.max(1, forecastDays.length));
+      renderDailyCharts(dailyValues, batteryMode);
+      renderForecastTable(forecastDays);
     }
 
-    populateTimeSelects();
-    buildPerHourInputs();
-    updateLoadFieldVisibility();
-    bindEvents();
-    setSidebarOpen(true);
-    runForecast();
+    async function fetchForecast() {
+      const settings = getSettings();
+      if (!settingsAreValid(settings)) {
+        elements.forecastStatus.classList.add("error");
+        elements.forecastStatus.textContent = "Check the coordinates, tilt, azimuth, peak power, and system losses values.";
+        return;
+      }
+
+      const batterySettings = getBatterySettings();
+      const batteryMode = elements.batteryModeEnabled.checked ? batterySettings : null;
+
+      elements.forecastStatus.classList.remove("error");
+      elements.forecastStatus.textContent = "Loading forecast…";
+      elements.forecastResults.hidden = true;
+      elements.forecastContent.hidden = false;
+
+      try {
+        const latitude = Number(elements.latitude.value);
+        const longitude = Number(elements.longitude.value);
+        const url = new URL("https://api.open-meteo.com/v1/forecast");
+        url.searchParams.set("latitude", String(latitude));
+        url.searchParams.set("longitude", String(longitude));
+        url.searchParams.set("hourly", "global_tilted_irradiance");
+        url.searchParams.set("forecast_days", "16");
+        url.searchParams.set("timezone", "auto");
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Forecast unavailable");
+        const data = await response.json();
+
+        const forecastDays = buildHourlyProductionByDay(data, settings, batteryMode);
+        if (!forecastDays.length) throw new Error("No forecast data available");
+
+        elements.forecastContent.hidden = true;
+        elements.forecastResults.hidden = false;
+        buildDailySummary(forecastDays, batteryMode);
+        renderHourlyCharts(forecastDays, batteryMode);
+
+        elements.forecastStatus.classList.remove("error");
+        elements.forecastStatus.textContent = batteryMode ? "Battery-aware forecast loaded." : "Forecast loaded.";
+      } catch (error) {
+        elements.forecastStatus.classList.add("error");
+        elements.forecastStatus.textContent = "Could not load forecast. Please try again.";
+      }
+    }
+
+    document.getElementById("saveFavoriteButton").addEventListener("click", () => {
+      const name = elements.name.value.trim();
+      const settings = getSettings();
+
+      if (!name) {
+        elements.forecastStatus.classList.add("error");
+        elements.forecastStatus.textContent = "Enter a favorite name before saving.";
+        elements.name.focus();
+        return;
+      }
+
+      if (!settingsAreValid(settings)) {
+        elements.forecastStatus.classList.add("error");
+        elements.forecastStatus.textContent = "Check the coordinates, tilt, azimuth, peak power, and system losses values.";
+        return;
+      }
+
+      const favorite = {
+        id: makeId(),
+        name,
+        ...settings,
+        battery: makeBatteryFavoriteValue(getBatterySettings())
+      };
+
+      favorites.push(favorite);
+      activeFavoriteId = favorite.id;
+      setFavoriteParameterStyle(true);
+      saveFavoritesToStorage();
+      renderFavorites();
+      elements.forecastStatus.classList.remove("error");
+      elements.forecastStatus.textContent = `Saved new favorite “${name}”.`;
+    });
+
+    document.getElementById("clearSelectionButton").addEventListener("click", () => {
+      clearFavoriteSelection(true);
+      setLocationAccuracyText("");
+      clearLocationAccuracyCircle();
+      elements.forecastStatus.textContent = "Favorite selection cleared.";
+    });
+
+    document.getElementById("forecastButton").addEventListener("click", fetchForecast);
+
+    function initializeDefaults() {
+      setDefaultProfiles();
+      restoreHourlyProfile(buildDefaultHourlyProfile());
+      renderFavorites();
+      syncBatteryUi();
+      updateSelectedNameDisplay();
+      setSidebarOpen(true);
+    }
+
+    initializeDefaults();
   </script>
 </body>
 </html>
